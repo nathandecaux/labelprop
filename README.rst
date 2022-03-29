@@ -4,7 +4,7 @@ LabelProp
 
 
 .. image:: https://img.shields.io/pypi/v/labelprop.svg
-        :target: https://pypi.python.org/pypi/labelprop
+        :target: https://pypi.python.org/pypi/deep-labelprop
 
 .. image:: https://img.shields.io/travis/nathandecaux/labelprop.svg
         :target: https://travis-ci.com/nathandecaux/labelprop
