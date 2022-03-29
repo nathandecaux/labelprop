@@ -43,7 +43,7 @@ setup(
     long_description=readme + '\n\n' + history,
     include_package_data=True,
     keywords='labelprop',
-    name='labelprop',
+    name='deep-labelprop',
     packages=find_packages(include=['labelprop', 'labelprop.*']),
     test_suite='tests',
     tests_require=test_requirements,
