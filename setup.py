@@ -21,7 +21,7 @@ requirements = ['kornia==0.5.8',
 
 test_requirements = [ ]
 
-dependency_links = ['https://download.pytorch.org/whl/cu113']
+dependency_links = ['https://download.pytorch.org/whl/cu111']
 
 setup(
     author="Nathan Decaux",
