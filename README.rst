@@ -25,7 +25,7 @@ Label propagation using deep registration
 Installation
 ============
 
-.. code-block:: console
+.. code-block:: bash
     git clone https://github.com/nathandecaux/labelprop.git
     cd labelprop
     python install -e . --extra-index-url https://download.pytorch.org/whl/cu111
