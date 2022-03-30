@@ -11,15 +11,13 @@ Label propagation using deep registration
 
     git clone <https://github.com/nathandecaux/labelprop.git> 
     cd labelprop
-    python install -e . --extra-index-url https://download.pytorch.org/whl/cu111 #or above
+    pip install -e . --extra-index-url https://download.pytorch.org/whl/cu111 #or above
 
-Features
---------
+## Features
 
 -   TODO
 
-Credits
--------
+## Credits
 
 This package was created with
 [Cookiecutter](https://github.com/audreyr/cookiecutter) and the
