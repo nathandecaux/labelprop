@@ -1,6 +1,6 @@
 # LabelProp
 
-[![image](https://img.shields.io/pypi/v/labelprop.svg)](https://pypi.python.org/pypi/deep-labelprop) [![image](https://img.shields.io/travis/nathandecaux/labelprop.svg)](https://travis-ci.com/nathandecaux/labelprop) [![Documentation Status](https://readthedocs.org/projects/labelprop/badge/?version=latest)](https://labelprop.readthedocs.io/en/latest/?version=latest)
+[![image](https://img.shields.io/pypi/v/deep-labelprop.svg)](https://pypi.python.org/pypi/deep-labelprop) [![image](https://img.shields.io/travis/nathandecaux/labelprop.svg)](https://travis-ci.com/nathandecaux/labelprop) [![Documentation Status](https://readthedocs.org/projects/labelprop/badge/?version=latest)](https://labelprop.readthedocs.io/en/latest/?version=latest)
 
 Label propagation using deep registration
 
