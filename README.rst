@@ -26,9 +26,9 @@ Installation
 ============
 
 .. code-block:: console
-        git clone https://github.com/nathandecaux/labelprop.git
-        cd labelprop
-        python install -e . --extra-index-url https://download.pytorch.org/whl/cu111
+    git clone https://github.com/nathandecaux/labelprop.git
+    cd labelprop
+    python install -e . --extra-index-url https://download.pytorch.org/whl/cu111
 
 
 Features
