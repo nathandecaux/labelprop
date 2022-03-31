@@ -226,4 +226,3 @@ class LabelProp(pl.LightningModule):
 
     def hardmax(self,Y,dim):
         return torch.moveaxis(F.one_hot(torch.argmax(Y,dim),self.n_classes), -1, dim)
-

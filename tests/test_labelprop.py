@@ -5,7 +5,7 @@
 
 import unittest
 
-from labelprop import labelprop
+from labelprop import lightning_model
 
 
 class TestLabelprop(unittest.TestCase):

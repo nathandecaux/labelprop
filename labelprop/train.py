@@ -9,7 +9,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 import monai
 from copy import copy,deepcopy
 import medpy.metric as med
-from .LabelProp import LabelProp
+from lightning_model import LabelProp
 from .Pretraining_model import LabelProp as PretrainingModel
 import time
 def to_one_hot(Y,dim=0):
