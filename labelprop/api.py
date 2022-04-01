@@ -1,16 +1,25 @@
 from urllib import response
-from flask import Flask,request,Response
+from flask import Flask,request,Response,send_file
 from .napari_entry import propagate_from_ckpt 
 import os
 import numpy as np
 import json
 import time
+import uuid
+import zipfile
+import io
+
 app=Flask(__name__)
 
 checkpoint_dir='/tmp/checkpoints/'
     
-
-
+global sessions
+sessions={}
+def create_buf_npz(array_dict):
+    buf = io.BytesIO()
+    np.savez_compressed(buf, **array_dict)
+    buf.seek(0)
+    return buf
 
 @app.route('/inference',methods=['POST'])
 def inference():
@@ -21,10 +30,18 @@ def inference():
     img=arrays['img']
     mask=arrays['mask']
     infos=json.loads(request.files['params'].read())
-    response=Response('Pouet')
+    token=str(uuid.uuid4())
+    print(token)
+    response=Response(token)
     @response.call_on_close
     def process_after_request():
-        propagate_from_ckpt(img,mask,**infos)
+        Y_up,Y_down,Y_fused=propagate_from_ckpt(img,mask,**infos)
+        sessions[token]={'img':img,'mask':mask,'infos':infos}
+        sessions[token]['time']=time.time()
+        sessions[token]['Y_up']=Y_up
+        sessions[token]['Y_down']=Y_down
+        sessions[token]['Y_fused']=Y_fused
+        
     return response
     # return response
     # mask=request.form['mask']
@@ -43,3 +60,35 @@ def list_ckpts():
     """
     return ','.join([x for x in os.listdir(checkpoint_dir) if '.ckpt' in x])
 
+@app.route('/download_inference',methods=['GET','POST'])
+def download_inference():
+    """
+    Return the inference results as a zip file.
+    """
+    token=request.args['token']
+    Y_up=sessions[token]['Y_up']
+    Y_down=sessions[token]['Y_down']
+    Y_fused=sessions[token]['Y_fused']
+    #Compress arrays with np.savez_compressed
+    arrays={'Y_up':Y_up,'Y_down':Y_down,'Y_fused':Y_fused}
+    buf=create_buf_npz(arrays)
+    return Response(buf)#send_file(buf,mimetype='application/x-zip-compressed',as_attachment=False,attachment_filename='inference_results.npz')
+
+@app.route('/get_session_info',methods=['GET'])
+def get_session_info():
+    """
+    Return the session info for a given token.
+    """
+    token=request.args['token']
+    return json.dumps(sessions[token]['infos'])
+
+@app.route('/get_session_list',methods=['GET'])
+def get_session_list():
+    """
+    Return a list of all tokens.
+    """
+    return ','.join(sessions.keys())
+
+
+if __name__=='__main__':
+    app.run(host='0.0.0.0',port=5000)

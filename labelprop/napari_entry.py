@@ -20,7 +20,7 @@ def propagate_from_ckpt(img,mask,checkpoint,shape=304,z_axis=2,label='all'):
     by_composition=True
     n_classes=int(np.max(mask))
     ckpt=join(ckpt_dir,checkpoint)
-    shape=(288,288)#torch.load(ckpt)['hyper_parameters']['size']
+    shape=torch.load(ckpt)['hyper_parameters']['shape']
     losses={'compo-reg-up':True,'compo-reg-down':True,'compo-dice-up':True,'compo-dice-down':True,'bidir-cons-reg':False,'bidir-cons-dice':False}
     model_PARAMS={'n_classes':n_classes,'way':'both','shape':shape,'selected_slices':None,'losses':losses,'by_composition':by_composition}
     print('hey ho')
