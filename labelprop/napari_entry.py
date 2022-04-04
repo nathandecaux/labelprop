@@ -15,7 +15,7 @@ def resample(Y,size):
 
 
 def propagate_from_ckpt(img,mask,checkpoint,shape=304,z_axis=2,label='all'):
-
+    if str(label)=='0': label='all'
     true_shape=img.shape
     by_composition=True
     n_classes=int(np.max(mask))
@@ -40,6 +40,9 @@ def propagate_from_ckpt(img,mask,checkpoint,shape=304,z_axis=2,label='all'):
 
 def train_and_infer(img,mask,pretrained_ckpt,shape,max_epochs,z_axis=2,output_dir='~/label_prop_checkpoints',name='',pretraining=False):
     way='both'
+    if pretrained_ckpt!=None:
+        ckpt=join(ckpt_dir,pretrained_ckpt)
+        shape=torch.load(ckpt)['hyper_parameters']['shape'][0]
     true_shape=img.shape
     shape=(shape,shape)
     by_composition=True

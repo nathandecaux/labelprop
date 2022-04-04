@@ -1,6 +1,7 @@
+from ntpath import join
 from urllib import response
 from flask import Flask,request,Response,send_file
-from .napari_entry import propagate_from_ckpt 
+from .napari_entry import propagate_from_ckpt,train_and_infer
 import os
 import numpy as np
 import json
@@ -36,6 +37,7 @@ def inference():
     @response.call_on_close
     def process_after_request():
         Y_up,Y_down,Y_fused=propagate_from_ckpt(img,mask,**infos)
+        print(np.unique(Y_up))
         sessions[token]={'img':img,'mask':mask,'infos':infos}
         sessions[token]['time']=time.time()
         sessions[token]['Y_up']=Y_up
@@ -51,6 +53,35 @@ def inference():
     # lab=request.form['lab']
     # Y_up,Y_down,Y_fused=propagate_from_ckpt(img,mask,checkpoint,shape,z_axis,lab)
     # return str(Y_up)+'\n'+str(Y_down)+'\n'+str(Y_fused)
+
+@app.route('/training',methods=['POST'])
+def training():
+    """
+    Receive img and mask arrays as string and checkpoint,shape,z_axis,lab parameters and call propagate_from_ckpt. 
+    """
+    arrays=np.load(request.files['arrays'])
+    img=arrays['img']
+    mask=arrays['mask']
+    infos=json.loads(request.files['params'].read())
+    infos['output_dir']=checkpoint_dir
+    if infos['pretrained_ckpt']!='':
+        infos['pretrained_ckpt']=join(checkpoint_dir,infos['pretrained_ckpt'])
+    else:
+        infos['pretrained_ckpt']=None
+    token=str(uuid.uuid4())
+    print(token)
+    response=Response(token)
+    @response.call_on_close
+    def process_after_request():
+        Y_up,Y_down,Y_fused=train_and_infer(img,mask,**infos)
+        print(np.unique(Y_up))
+        sessions[token]={'img':img,'mask':mask,'infos':infos}
+        sessions[token]['time']=time.time()
+        sessions[token]['Y_up']=Y_up
+        sessions[token]['Y_down']=Y_down
+        sessions[token]['Y_fused']=Y_fused
+        
+    return response
 
 
 @app.route('/list_ckpts',methods=['GET'])
