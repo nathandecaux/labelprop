@@ -11,7 +11,7 @@ from copy import copy,deepcopy
 import medpy.metric as med
 from .lightning_model import LabelProp
 from .Pretraining_model import LabelProp as PretrainingModel
-import time
+from .voxelmorph2d import NCC
 def to_one_hot(Y,dim=0):
     return torch.moveaxis(F.one_hot(Y), -1, dim).float()
 
@@ -69,8 +69,16 @@ def get_weights(Y):
 
 def fuse_up_and_down(Y_up,Y_down,weights):
     Y=torch.zeros_like(Y_up)
-    for i,w in enumerate(weights):
-        Y[:,i]=(1-w)*Y_up[:,i]+w*Y_down[:,i]
+    weights=F.softmax(weights,2)
+    for lab in list(range(Y.shape[0]))[1:]:
+        for i,corr_maps in enumerate(weights[lab]):
+            # w=1-corr_maps[0,0,0]#
+            # w=F.softmax(corr_maps,0)
+            w=corr_maps
+            print(w)
+            Y[lab,i]=w[0]*Y_up[lab,i]+w[1]*Y_down[lab,i]
+            Y[0,i]+=1-torch.nn.Sigmoid()(Y[lab:lab+1,i])[0]
+    Y[0]=Y[0]/(Y.shape[0]-1)
     return Y
 
 def get_successive_fields(X,model):
@@ -127,9 +135,12 @@ def propagate_by_composition(X,Y,model):
     model.freeze()
     fields_up,fields_down=get_successive_fields(X,model)
     X=X[0]
+    # weights=torch.zeros((n_classes,Y.shape[1],2,X.shape[-2],X.shape[-1]))
+    weights=torch.zeros((n_classes,Y.shape[1],2))
     for lab in list(range(n_classes))[1:]:
         print('label : ',lab)
         chunks=get_chunks(binarize(Y,lab))
+        #Coucou
         print('Chunks : ',chunks)
         
         for chunk in chunks:
@@ -138,9 +149,15 @@ def propagate_by_composition(X,Y,model):
                 composed_field_down=model.compose_list(fields_down[i:chunk[1]][::-1]).to('cuda')
                 Y_up[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[0]].unsqueeze(0).to('cuda'),composed_field_up).cpu().detach()[0]
                 Y_down[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[1]].unsqueeze(0).to('cuda'),composed_field_down).cpu().detach()[0]
+                weights[lab,i,0]=-NCC().loss(model.apply_deform(to_batch(X[chunk[0]],'cuda'),composed_field_up),to_batch(X[i],'cuda'),True).cpu().detach()
+                weights[lab,i,1]=-NCC().loss(model.apply_deform(to_batch(X[chunk[1]],'cuda'),composed_field_down),to_batch(X[i],'cuda'),True).cpu().detach()
+                #weights[lab,i,0]=-torch.nn.L1Loss()(model.apply_deform(to_batch(X[chunk[0]],'cuda'),composed_field_up),to_batch(X[i],'cuda')).cpu().detach()
+                #weights[lab,i,1]=-torch.nn.L1Loss()(model.apply_deform(to_batch(X[chunk[1]],'cuda'),composed_field_down),to_batch(X[i],'cuda')).cpu().detach()
     Y_up[0]=(torch.sum(Y_up[1:],0)==0)*1.
     Y_down[0]=(torch.sum(Y_down[1:],0)==0)*1.
-    return Y_up,Y_down
+    Y_fused=fuse_up_and_down(Y_up,Y_down,weights)
+    return Y_up,Y_down,Y_fused
+    
 
 
 def complex_propagation(X,Y,model):
@@ -300,7 +317,7 @@ def inference(datamodule,model_PARAMS,ckpt):
     model=model.load_from_checkpoint(ckpt,strict=False)
     datamodule.setup('fit')
     X,Y=datamodule.train_dataloader().dataset[0]
-    weights=get_weights(Y)
-    Y_up,Y_down=propagate_by_composition(X,Y,model)
-    Y_fused=fuse_up_and_down(Y_up,Y_down,weights)
+    # weights=get_weights(Y)
+    Y_up,Y_down,Y_fused=propagate_by_composition(X,Y,model)
+    # Y_fused=fuse_up_and_down(Y_up,Y_down,weights)
     return torch.argmax(Y_up,0),torch.argmax(Y_down,0),torch.argmax(Y_fused,0)

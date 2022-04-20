@@ -7,7 +7,7 @@ from torch.nn import functional as func
 from os.path import join
 import shutil
 
-ckpt_dir='/tmp/checkpoints/'
+ckpt_dir='/home/nathan/checkpoints/'
 
 def resample(Y,size):
     Y=func.interpolate(Y[None,None,...]*1.,size,mode='nearest')[0,0]

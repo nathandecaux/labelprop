@@ -2,9 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
-from monai.networks.nets import UNet
+from monai.networks.nets import UNet,Classifier,DenseNet
 import numpy as np
 import math
+from kornia.geometry.transform import get_perspective_transform,get_affine_matrix2d
 
 class VxmDense(nn.Module):
     """
@@ -48,6 +49,7 @@ class VxmDense(nn.Module):
         self.training = True
 
         # ensure correct dimensionality
+        self.inshape=inshape
         ndims = len(inshape)
         assert ndims in [1, 2, 3], 'ndims should be one of 1, 2, or 3. found: %d' % ndims
 
@@ -70,7 +72,6 @@ class VxmDense(nn.Module):
         # init flow layer with small weights and bias
         self.flow.weight = nn.Parameter(Normal(0, 1e-5).sample(self.flow.weight.shape))
         self.flow.bias = nn.Parameter(torch.zeros(self.flow.bias.shape))
-
         # probabilities are not supported in pytorch
         if use_probs:
             raise NotImplementedError(
@@ -109,10 +110,9 @@ class VxmDense(nn.Module):
         # concatenate inputs and propagate unet
         x = torch.cat([source, target], dim=1)
         x = self.unet_model(x)
-
         # transform into flow field
         flow_field = self.flow(x)
-
+        
         # resize flow for integration
         pos_flow = flow_field
         if self.resize:
@@ -132,7 +132,6 @@ class VxmDense(nn.Module):
             if self.fullsize:
                 pos_flow = self.fullsize(pos_flow)
                 neg_flow = self.fullsize(neg_flow) if self.bidir else None
-
         # warp image with flow field
         y_source = self.transformer(source, pos_flow)
         y_target = self.transformer(target, neg_flow) if self.bidir else None
@@ -147,6 +146,62 @@ class VxmDense(nn.Module):
                 return y_source, pos_flow
 
 
+class FeaturesToAffine(nn.Module):
+    """
+    Dense network that takes pixels of features map and convert it to affine matrix 
+    """
+
+    def __init__(self,inshape):
+        super().__init__()
+        
+        self.inshape=inshape
+        self.outshape=4*4  
+        self.conv1=nn.Conv2d(16,1,kernel_size=1)
+        self.flatten=nn.Flatten()
+        self.layer=nn.Sequential(nn.Linear(self.inshape,self.outshape),nn.ReLU())
+        self.layer2=nn.Sequential(nn.Linear(self.outshape,self.outshape),nn.Tanh())
+    def forward(self,x):
+        x=self.conv1(x)
+        x=self.layer(self.flatten(x))
+        x=self.layer2(x)
+        return x
+
+class AffineGenerator(nn.Module):
+    """
+    Dense network that takes affine matrix and generate affine transformation
+    """
+
+    def __init__(self,inshape):
+        super().__init__()
+        self.inshape=inshape
+        self.network=Classifier(inshape,9,(2,2,2,2,2),(2,2,2,2,2))
+        self.max_angle=nn.Parameter(30.*torch.ones(1))
+        self.max_scale=nn.Parameter(0.01*torch.ones(1))
+    def forward(self,x1,x2):
+        x=torch.cat([x1,x2],dim=1)
+        x=self.network(x)
+        # x=get_affine_matrix2d(translations=nn.Tanh()(x[:,0:2])*self.inshape[0]/2,center=nn.Tanh()(x[:,5:7])*self.inshape[0]/2,scale=nn.Tanh()(x[:,2:4])*self.max_scale+1,angle=nn.Tanh()(x[:,4])*self.max_angle)
+        x=get_affine_matrix2d(nn.Tanh()(x[:,0]),center=x[:,5:7],scale=x[:,2:4],angle=x[:,4])
+
+        return x
+
+class AffineGenerator3D(nn.Module):
+    """
+    Dense network that takes affine matrix and generate affine transformation
+    """
+
+    def __init__(self,inshape):
+        super().__init__()
+        self.inshape=(2,inshape[0],inshape[1],inshape[2])
+        print(self.inshape)
+        #self.network=Classifier(inshape,16,(2,2,2,2,2),(2,2,2,2,2))
+        self.network=DenseNet(3,2,16)
+    def forward(self,x1,x2):
+        x=torch.cat([x1,x2],dim=1)
+        x=self.network(x)
+        
+        return x.view(-1,4,4)
+    
 class ConvBlock(nn.Module):
     """
     Specific convolutional block followed by leakyrelu for unet.
@@ -271,7 +326,7 @@ class NCC:
     def __init__(self, win=None):
         self.win = win
 
-    def loss(self, y_true, y_pred):
+    def loss(self, y_true, y_pred, mean=True):
 
         Ii = y_true
         Ji = y_pred
@@ -322,8 +377,10 @@ class NCC:
         J_var = J2_sum - 2 * u_J * J_sum + u_J * u_J * win_size
 
         cc = cross * cross / (I_var * J_var + 1e-5)
-
-        return -torch.mean(cc)
+        if mean:
+            return -torch.mean(cc)
+        else:
+            return cc
 
 
 class MSE:

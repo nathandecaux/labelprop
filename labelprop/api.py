@@ -12,7 +12,7 @@ import io
 
 app=Flask(__name__)
 
-checkpoint_dir='/tmp/checkpoints/'
+checkpoint_dir='/home/nathan/checkpoints/'
     
 global sessions
 sessions={}
@@ -101,7 +101,7 @@ def download_inference():
     Y_down=sessions[token]['Y_down']
     Y_fused=sessions[token]['Y_fused']
     #Compress arrays with np.savez_compressed
-    arrays={'Y_up':Y_up,'Y_down':Y_down,'Y_fused':Y_fused}
+    arrays={'Y_up':Y_up.astype('uint8'),'Y_down':Y_down.astype('uint8'),'Y_fused':Y_fused.astype('uint8')}
     buf=create_buf_npz(arrays)
     return Response(buf)#send_file(buf,mimetype='application/x-zip-compressed',as_attachment=False,attachment_filename='inference_results.npz')
 

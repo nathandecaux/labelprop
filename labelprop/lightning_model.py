@@ -1,9 +1,10 @@
 import torch
+from torch import nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
 import kornia
 from .voxelmorph2d import VxmDense,NCC,Grad,Dice
-
+from monai.losses import BendingEnergyLoss,GlobalMutualInformationLoss
 class LabelProp(pl.LightningModule):
 
     @property
@@ -31,6 +32,7 @@ class LabelProp(pl.LightningModule):
         self.way=way #If up, learning only "forward" transitions (phi_i->j with j>i). Other choices : "down", "both". Bet you understood ;)
         self.losses=losses
         self.by_composition=by_composition
+        if self.by_composition: print('Using composition for training')
         print('Losses',losses)
         self.save_hyperparameters()
 
@@ -87,11 +89,15 @@ class LabelProp(pl.LightningModule):
         loss_seg=0
         loss_trans=0
         if moved!=None:
-            loss_ncc=NCC().loss(moved,target)
+            # max_peak=F.conv2d(target,target).sum()
+            # loss_ncc=-F.conv2d(moved,target).sum()/max_peak#+NCC().loss(moved,target)
+            loss_ncc=GlobalMutualInformationLoss()(moved,target)
         if moved_mask!=None:
             loss_seg= Dice().loss(moved_mask,target_mask)
         if field!=None:
-            loss_trans=Grad().loss(field,field) #Recommanded weight for this loss is 1 (see Voxelmorph paper) 
+            loss_trans=BendingEnergyLoss()(field) #Recommanded weight for this loss is 1 (see Voxelmorph paper) 
+            # loss_trans=BendingEnergyLoss()(trans)
+
         return loss_ncc+loss_seg+loss_trans
 
     def blend(self,x,y):
@@ -103,91 +109,106 @@ class LabelProp(pl.LightningModule):
     def training_step(self, batch, batch_nb):
         X,Y=batch # X : Full scan (1x1xLxHxW) | Y : Ground truth (1xCxLxHxW)
         y_opt=self.optimizers()
-        loss=[]
-        chunks=[]
-        chunk=[]
-        loss_up=[]
-        loss_down=[]
         dices_prop=[]
-        #Identifying chunks (i->j)
-        for i in range(X.shape[2]):
-            y=Y[:,:,i,...]
-            if len(torch.unique(torch.argmax(y,1)))>1:
-                chunk.append(i)
-            if len(chunk)==2:
-                chunks.append(chunk)
-                chunk=[i]
-        if self.current_epoch==0:
-            print(chunks)
-        
-        for chunk in chunks:
-            y_opt.zero_grad()
-            #Sequences of flow fields (field_up=forward, field_down=backward)
-            fields_up=[]
-            fields_down=[]
-            for i in range(chunk[0],chunk[1]):
-                #Computing flow fields and loss for each hop from chunk[0] to chunk[1]
-                x1=X[:,:,i,...]
-                x2=X[:,:,i+1,...]
+        Y_multi_lab=torch.clone(Y)
+        for lab in list(range(Y_multi_lab.shape[1]))[1:]:
+            chunks=[]
+            chunk=[]
+            
+            #Binarize ground truth according to the label
+            Y=torch.stack([1-Y_multi_lab[:,lab],Y_multi_lab[:,lab]],dim=1)
+            #Identifying chunks (i->j)
+            for i in range(X.shape[2]):
+                y=Y[:,:,i,...]
+                if len(torch.unique(torch.argmax(y,1)))>1:
+                    chunk.append(i)
+                if len(chunk)==2:
+                    chunks.append(chunk)
+                    chunk=[i]
+            if self.current_epoch==0:
+                print(lab,chunks)
+            
+            for chunk in chunks:
+                y_opt.zero_grad()
+                #Sequences of flow fields (field_up=forward, field_down=backward)
+                fields_up=[]
+                fields_down=[]
+                loss_up=[]
+                loss_down=[]
+                loss=[]
+
+                for i in range(chunk[0],chunk[1]):
+                    #Computing flow fields and loss for each hop from chunk[0] to chunk[1]
+                    x1=X[:,:,i,...]
+                    x2=X[:,:,i+1,...]
+                    if not self.way=='down':
+                        moved_x1,field_up=self.forward(x1,x2)
+                        loss_up.append(self.compute_loss(moved_x1,x2,field=field_up))
+                        fields_up.append(field_up)
+                        if len(fields_up)>0:
+                            field_up_2=self.compose_deformation(fields_up[-1],field_up)
+                            loss_up.append(self.compute_loss(self.apply_deform(X[:,:,i-1],field_up_2),x2))
+
+                    if not self.way=='up':
+                        moved_x2,field_down=self.forward(x2,x1)#
+                        fields_down.append(field_down)
+                        moved_x2=self.registrator.transformer(x2,field_down)
+                        loss_down.append(self.compute_loss(moved_x2,x1,field=field_down))
+                        if len(fields_down)>0:
+                            field_down_2=self.compose_deformation(fields_down[-1],field_down)
+                            loss_down.append(self.compute_loss(self.apply_deform(X[:,:,i+1],field_down_2),x1))
+   
+
+
+                #Better with mean
+                if self.way=='up':
+                    loss=torch.stack(loss_up).mean()
+                elif self.way=='down':
+                    loss=torch.stack(loss_down).mean()
+                else:
+                    loss_up=torch.stack(loss_up).mean()
+                    loss_down=torch.stack(loss_down).mean()
+                    loss=(loss_up+loss_down)
+                
+                # Computing registration from the sequence of flow fields
                 if not self.way=='down':
-                    moved_x1,field_up=self.forward(x1,x2)
-                    loss_up.append(self.compute_loss(moved_x1,x2,field=field_up))
-                    fields_up.append(field_up)
+                    prop_x_up=X[:,:,chunk[0],...]
+                    prop_y_up=Y[:,:,chunk[0],...]
+                    if self.by_composition:
+                        composed_fields_up=self.compose_list(fields_up)
+                        prop_x_up=self.apply_deform(prop_x_up,composed_fields_up)
+                        prop_y_up=self.apply_deform(prop_y_up,composed_fields_up)
+                    else:
+                        for field_up in fields_up:
+                            prop_x_up=self.apply_deform(prop_x_up,field_up)
+                            prop_y_up=self.apply_deform(prop_y_up,field_up)
+                    
+                    if self.losses['compo-reg-up']:
+                        loss+=self.compute_loss(prop_x_up,X[:,:,chunk[1],...])
+                    if self.losses['compo-dice-up']:
+                        dice_loss=self.compute_loss(moved_mask=prop_y_up,target_mask=Y[:,:,chunk[1],...])
+                        loss+=dice_loss
+                        dices_prop.append(dice_loss)
 
                 if not self.way=='up':
-                    moved_x2,field_down=self.forward(x2,x1)#
-                    fields_down.append(field_down)
-                    moved_x2=self.registrator.transformer(x2,field_down)
-                    loss_down.append(self.compute_loss(moved_x2,x1,field=field_down))
-    
-            #Better with mean
-            if self.way=='up':
-                loss=torch.stack(loss_up).mean()
-            elif self.way=='down':
-                loss=torch.stack(loss_down).mean()
-            else:
-                loss_up=torch.stack(loss_up).mean()
-                loss_down=torch.stack(loss_down).mean()
-                loss=(loss_up+loss_down)
-            
-            # Computing registration from the sequence of flow fields
-            if not self.way=='down':
-                prop_x_up=X[:,:,chunk[0],...]
-                prop_y_up=Y[:,:,chunk[0],...]
-                if self.by_composition:
-                    composed_fields_up=self.compose_list(fields_up)
-                    prop_x_up=self.apply_deform(prop_x_up,composed_fields_up)
-                    prop_y_up=self.apply_deform(prop_y_up,composed_fields_up)
-                else:
-                    for field_up in fields_up:
-                        prop_x_up=self.apply_deform(prop_x_up,field_up)
-                        prop_y_up=self.apply_deform(prop_y_up,field_up)
-                
-                if self.losses['compo-reg-up']:
-                    loss+=self.compute_loss(prop_x_up,X[:,:,chunk[1],...])
-                if self.losses['compo-dice-up']:
-                    dice_loss=self.compute_loss(moved_mask=prop_y_up,target_mask=Y[:,:,chunk[1],...])
-                    loss+=dice_loss
-                    dices_prop.append(dice_loss)
+                    prop_x_down=X[:,:,chunk[1],...]
+                    prop_y_down=Y[:,:,chunk[1],...]
+                    if self.by_composition:
+                        composed_fields_down=self.compose_list(fields_down[::-1])
+                        prop_x_down=self.apply_deform(prop_x_down,composed_fields_down)
+                        prop_y_down=self.apply_deform(prop_y_down,composed_fields_down)
+                    else:
+                        for field_down in reversed(fields_down):
+                            prop_x_down=self.apply_deform(prop_x_down,field_down)
+                            prop_y_down=self.apply_deform(prop_y_down,field_down)
 
-            if not self.way=='up':
-                prop_x_down=X[:,:,chunk[1],...]
-                prop_y_down=Y[:,:,chunk[1],...]
-                if self.by_composition:
-                    composed_fields_down=self.compose_list(fields_down[::-1])
-                    prop_x_down=self.apply_deform(prop_x_down,composed_fields_down)
-                    prop_y_down=self.apply_deform(prop_y_down,composed_fields_down)
-                else:
-                    for field_down in reversed(fields_down):
-                        prop_x_down=self.apply_deform(prop_x_down,field_down)
-                        prop_y_down=self.apply_deform(prop_y_down,field_down)
+                    if self.losses['compo-reg-down']:
+                        loss+=self.compute_loss(prop_x_down,X[:,:,chunk[0],...])
+                    if self.losses['compo-dice-down']:
+                        dice_loss=self.compute_loss(moved_mask=prop_y_down,target_mask=Y[:,:,chunk[0],...])
+                        loss+=dice_loss
+                        dices_prop.append(dice_loss)
 
-                if self.losses['compo-reg-down']:
-                    loss+=self.compute_loss(prop_x_down,X[:,:,chunk[0],...])
-                if self.losses['compo-dice-down']:
-                    dice_loss=self.compute_loss(moved_mask=prop_y_down,target_mask=Y[:,:,chunk[0],...])
-                    loss+=dice_loss
-                    dices_prop.append(dice_loss)
 
 
             #Additionnal loss to ensure sequences (images and masks) generated from "positive" and "negative" flows are equal
@@ -199,11 +220,10 @@ class LabelProp(pl.LightningModule):
             #     if self.losses['bidir-cons-reg']:
             #         loss+=self.compute_loss(prop_x_up,prop_x_down)
 
-            self.log_dict({'loss':loss},prog_bar=True)
-            self.manual_backward(loss)
-            y_opt.step()
-            loss_up=[]
-            loss_down=[]
+                self.log_dict({'loss':loss},prog_bar=True)
+                self.manual_backward(loss)
+                y_opt.step()
+
             # self.logger.experiment.add_image('x_true',X[0,:,chunk[0],...])
             # self.logger.experiment.add_image('prop_x_down',prop_x_down[0,:,0,...])
             # self.logger.experiment.add_image('x_true_f',X[0,:,chunk[1],...])
