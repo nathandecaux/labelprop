@@ -1,9 +1,12 @@
 from re import S
+
+import numpy
 from labelprop.train import train_and_eval, get_successive_fields,inference
 from labelprop.DataLoading import LabelPropDataModule
 from labelprop.napari_entry import propagate_from_ckpt
 from labelprop.lightning_model import LabelProp
 from os.path import join
+import plotext as plt
 import torch
 #Init vars
 checkpoint='labelprop-epoch=99-val_accuracy=99.00-20042022-100334.ckpt'
@@ -30,13 +33,22 @@ dm=LabelPropDataModule(img_path=join(data_dir,"img.nii.gz"),mask_path=join(data_
 #Fusing Y_up and Y_down
 dm.setup()
 X,Y_sparse=dm.test_dataset[0]
-trained_model=LabelProp(**model_PARAMS).load_from_checkpoint(checkpoint)
-fields_up,fields_down=get_successive_fields(X.to('cuda'),trained_model.to('cuda'))
+# trained_model=LabelProp(**model_PARAMS).load_from_checkpoint(checkpoint)
+# fields_up,fields_down=get_successive_fields(X.to('cuda'),trained_model.to('cuda'))
 
-torch.save(fields_up,'fields_up.pt')
-torch.save(fields_down,'fields_down.pt')
-torch.save(X,'img.pt')
-torch.save(Y_sparse,'mask.pt')
+# torch.save(fields_up,'fields_up.pt')
+# torch.save(fields_down,'fields_down.pt')
+# torch.save(X,'img.pt')
+# torch.save(Y_sparse,'mask.pt')
+import numpy as np
+# print(line.shape)
+plt.clc()
+
+for i in range(30):
+    plt.clt()
+    # plt.cld()
+    plt.scatter([i],[i])
+plt.show()
 #Il y a mieux qu'une boucle à faire ici, mais il faudrait bouger les dimensions
 # for i,w in enumerate(weights):
 #     Y_up[:,:,i]*=1-w

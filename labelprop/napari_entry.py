@@ -10,8 +10,10 @@ import shutil
 ckpt_dir='/home/nathan/checkpoints/'
 
 def resample(Y,size):
-    Y=func.interpolate(Y[None,None,...]*1.,size,mode='nearest')[0,0]
-    return Y
+    Y=torch.moveaxis(func.one_hot(Y.long()),-1,0)
+    Y=func.interpolate(Y[None,...]*1.,size,mode='trilinear',align_corners=True)[0]
+
+    return torch.argmax(Y,0)
 
 
 def propagate_from_ckpt(img,mask,checkpoint,shape=304,z_axis=2,label='all'):

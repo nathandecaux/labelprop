@@ -20,7 +20,11 @@ class FullScan(data.Dataset):
             self.X=torch.moveaxis(self.X,z_axis+1,1)
             self.Y=torch.moveaxis(self.Y,z_axis+1,1)
         if isinstance(shape,int): shape=(shape,shape) 
-        self.X,self.Y=self.resample(self.X,self.Y,(self.Y.shape[1],shape[0],shape[1]))
+        self.Y=torch.moveaxis(func.one_hot(self.Y.long()),-1,1)
+        print('Y shape',self.Y.shape)
+        self.X,self.Y=self.resample(self.X,self.Y,(self.Y.shape[2],shape[0],shape[1]))
+        print('Y shape after resampling',self.Y.shape)
+
         if selected_slices!=None:
             if selected_slices=='bench':
                 annotated=[]
@@ -33,7 +37,7 @@ class FullScan(data.Dataset):
                 if i not in selected_slices:
                     self.Y[:,i,...]=self.Y[:,i,...]*0
         self.selected_slices=selected_slices
-        self.Y=torch.moveaxis(func.one_hot(self.Y.long()), -1, 1).float()
+        # self.Y=torch.moveaxis(func.one_hot(self.Y.long()), -1, 1).float()
 
     def __getitem__(self, index):
         x = self.X[index]
@@ -41,7 +45,7 @@ class FullScan(data.Dataset):
         return x.unsqueeze(0), y
     def resample(self,X,Y,size):
         X=func.interpolate(X[None,...],size,mode='trilinear',align_corners=True)[0]
-        Y=func.interpolate(Y[None,...],size,mode='nearest')[0]
+        Y=func.interpolate(Y*1.0,size,mode='trilinear',align_corners=True)[0]
         return X,Y
     def __len__(self):
         return len(self.Y)
