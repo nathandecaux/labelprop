@@ -45,7 +45,7 @@ class FullScan(data.Dataset):
         return x.unsqueeze(0), y
     def resample(self,X,Y,size):
         X=func.interpolate(X[None,...],size,mode='trilinear',align_corners=True)[0]
-        Y=func.interpolate(Y*1.0,size,mode='trilinear',align_corners=True)[0]
+        Y=func.interpolate(Y*1.0,size,mode='trilinear',align_corners=True)
         return X,Y
     def __len__(self):
         return len(self.Y)
