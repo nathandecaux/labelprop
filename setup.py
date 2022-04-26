@@ -10,15 +10,20 @@ with open('README.rst') as readme_file:
 with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
-requirements = ['kornia==0.5.8',
+requirements = [
+    'setuptools==58.0.4',
+    'torchmetrics==0.7.3',
+    'kornia==0.5.8',
     'medpy==0.4.0',
     'monai==0.6.0',
     'nibabel==3.2.1',
+
     'pytorch_lightning==1.3.8',
     'torch==1.10.2',
     'torchio==0.18.47',
     'torchvision==0.11.3',
-    "flask"]
+    "Flask",
+    "plotext==5.0.2"]
 
 test_requirements = [ ]
 
