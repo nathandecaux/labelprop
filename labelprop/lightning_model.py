@@ -72,9 +72,9 @@ class LabelProp(pl.LightningModule):
         Returns:
             moved (Tensor): Moved image
             field (Tensor): Deformation field from moving to target
-        """                    
-        moved,field=self.registrator.forward(moving,target,registration=registration)      
-        return moved,field
+        """             
+        return self.registrator.forward(moving,target,registration=registration)
+
       
     def compute_loss(self,moved=None,target=None,moved_mask=None,target_mask=None,field=None):
         """
@@ -83,7 +83,7 @@ class LabelProp(pl.LightningModule):
             target : Target anatomical image 
             moved_mask : Transformed mask  
             target_mask : Target mask 
-            field : Deformation field
+            field : Velocity field (=non integrated)
         """        
         loss_ncc=0
         loss_seg=0
@@ -91,12 +91,14 @@ class LabelProp(pl.LightningModule):
         if moved!=None:
             # max_peak=F.conv2d(target,target).sum()
             # loss_ncc=-F.conv2d(moved,target).sum()/max_peak#+NCC().loss(moved,target)
-            loss_ncc=GlobalMutualInformationLoss()(moved,target)
+            loss_ncc=NCC().loss(moved,target)
+            # loss_ncc=GlobalMutualInformationLoss()(moved,target) #MONAI
         if moved_mask!=None:
             loss_seg= Dice().loss(moved_mask,target_mask)
         if field!=None:
-            loss_trans=BendingEnergyLoss()(field) #Recommanded weight for this loss is 1 (see Voxelmorph paper) 
+            #loss_trans=BendingEnergyLoss()(field) #MONAI
             # loss_trans=BendingEnergyLoss()(trans)
+            Grad().loss(field,field)
 
         return loss_ncc+loss_seg+loss_trans
 
@@ -142,18 +144,18 @@ class LabelProp(pl.LightningModule):
                     x1=X[:,:,i,...]
                     x2=X[:,:,i+1,...]
                     if not self.way=='down':
-                        moved_x1,field_up=self.forward(x1,x2)
-                        loss_up.append(self.compute_loss(moved_x1,x2,field=field_up))
+                        moved_x1,field_up,preint_field=self.forward(x1,x2,registration=False)
+                        loss_up.append(self.compute_loss(moved_x1,x2,field=preint_field))
                         fields_up.append(field_up)
                         if len(fields_up)>0:
                             field_up_2=self.compose_deformation(fields_up[-1],field_up)
                             loss_up.append(self.compute_loss(self.apply_deform(X[:,:,i-1],field_up_2),x2))
 
                     if not self.way=='up':
-                        moved_x2,field_down=self.forward(x2,x1)#
+                        moved_x2,field_down,preint_field=self.forward(x2,x1,registration=False)#
                         fields_down.append(field_down)
                         moved_x2=self.registrator.transformer(x2,field_down)
-                        loss_down.append(self.compute_loss(moved_x2,x1,field=field_down))
+                        loss_down.append(self.compute_loss(moved_x2,x1,field=preint_field))
                         if len(fields_down)>0:
                             field_down_2=self.compose_deformation(fields_down[-1],field_down)
                             loss_down.append(self.compute_loss(self.apply_deform(X[:,:,i+1],field_down_2),x1))

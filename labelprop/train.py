@@ -70,17 +70,23 @@ def get_weights(Y):
 
 def fuse_up_and_down(Y_up,Y_down,weights):
     Y=torch.zeros_like(Y_up)
+    plt.cld()
+    if len(weights.shape)>3:
+        plt.plot(weights[1,:,0].flatten(1).mean(1).cpu().detach().numpy().tolist())
+        plt.plot(weights[1,:,1].flatten(1).mean(1).cpu().detach().numpy().tolist())
+    else:
+        plt.plot(weights[1,:,0].cpu().detach().numpy().tolist())
+        plt.plot(weights[1,:,1].cpu().detach().numpy().tolist())
+    plt.show()
 
-    plt.plot(weights[:,:,0].mean(0).flatten(1).mean(1).cpu().detach().numpy().tolist())
-    plt.plot(weights[:,:,1].mean(0).flatten(1).mean(1).cpu().detach().numpy().tolist())
+    
     for lab in list(range(Y.shape[0]))[1:]:
         # weights[lab]=F.softmax(weights[lab],1)
-        weights[lab]=weights[lab]/weights[lab].sum(1,keepdim=True)
+        # weights[lab]=weights[lab]/weights[lab].sum(1,keepdim=True)
         for i,corr_maps in enumerate(weights[lab]):
             w=corr_maps
             Y[lab,i]=w[0]*Y_up[lab,i]+w[1]*Y_down[lab,i]
-            Y[0,i]+=1-torch.nn.Sigmoid()(Y[lab:lab+1,i])[0]
-        plt.show()
+            Y[0,i]+=1-Y[lab,i]#torch.nn.Sigmoid()(Y[lab:lab+1,i])[0]
 
     Y[0]=Y[0]/(Y.shape[0]-1)
     return Y
@@ -139,8 +145,8 @@ def propagate_by_composition(X,Y,model):
     model.freeze()
     fields_up,fields_down=get_successive_fields(X,model)
     X=X[0]
-    weights=torch.ones((n_classes,Y.shape[1],2,X.shape[-2],X.shape[-1]))*0.5
-    # weights=torch.ones((n_classes,Y.shape[1],2))*0.5
+    # weights=torch.ones((n_classes,Y.shape[1],2,X.shape[-2],X.shape[-1]))*0.5
+    weights=torch.ones((n_classes,Y.shape[1],2))*0.5
     for lab in list(range(n_classes))[1:]:
         print('label : ',lab)
         chunks=get_chunks(binarize(Y,lab))
@@ -153,15 +159,14 @@ def propagate_by_composition(X,Y,model):
                 composed_field_down=model.compose_list(fields_down[i:chunk[1]][::-1]).to('cuda')
                 Y_up[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[0]].unsqueeze(0).to('cuda'),composed_field_up).cpu().detach()[0]
                 Y_down[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[1]].unsqueeze(0).to('cuda'),composed_field_down).cpu().detach()[0]
-                weights[lab,i,0]=-NCC([99,99]).loss(model.apply_deform(to_batch(X[chunk[0]],'cuda'),composed_field_up),to_batch(X[i],'cuda'),False).cpu().detach()
-                weights[lab,i,1]=-NCC([99,99]).loss(model.apply_deform(to_batch(X[chunk[1]],'cuda'),composed_field_down),to_batch(X[i],'cuda'),False).cpu().detach()
-                # weights[lab,i,0]=torch.arctan(torch.ones(1)*(i-(chunk[1]-chunk[0])/2))/3.14#arctan(C(k−(j−i)/2))/π
-                # weights[lab,i,1]=1-weights[lab,i,0]
-                # weights[lab,i,0]=-torch.nn.L1Loss(reduction='none')(model.apply_deform(to_batch(X[chunk[0]],'cuda'),composed_field_up),to_batch(X[i],'cuda')).cpu().detach()
-                # weights[lab,i,1]=-torch.nn.L1Loss(reduction='none')(model.apply_deform(to_batch(X[chunk[1]],'cuda'),composed_field_down),to_batch(X[i],'cuda')).cpu().detach()
+                # weights[lab,i,0]=-NCC([99,99]).loss(model.apply_deform(to_batch(X[chunk[0]],'cuda'),composed_field_up),to_batch(X[i],'cuda'),False).cpu().detach()
+                # weights[lab,i,1]=-NCC([99,99]).loss(model.apply_deform(to_batch(X[chunk[1]],'cuda'),composed_field_down),to_batch(X[i],'cuda'),False).cpu().detach()
+                weights[lab,i,1]=torch.tensor(0.5+np.arctan(i-chunk[0]-(chunk[1]-chunk[0])/2)/3.14)#arctan(C(k−(j−i)/2))/π
+                weights[lab,i,0]=1-weights[lab,i,1]
+                # weights[lab,i,0]=-torch.nn.L1Loss()(model.apply_deform(to_batch(X[chunk[0]],'cuda'),composed_field_up),to_batch(X[i],'cuda')).cpu().detach()
+                # weights[lab,i,1]=-torch.nn.L1Loss()(model.apply_deform(to_batch(X[chunk[1]],'cuda'),composed_field_down),to_batch(X[i],'cuda')).cpu().detach()
     # weights[1,:,1]=get_weights(Y)
     # weights[1,:,0]=1-weights[1,:,1]
-    
     Y_up[0]=(torch.sum(Y_up[1:],0)==0)*1.
     Y_down[0]=(torch.sum(Y_down[1:],0)==0)*1.
     Y_fused=fuse_up_and_down(Y_up,Y_down,weights)

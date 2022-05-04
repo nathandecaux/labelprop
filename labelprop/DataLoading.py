@@ -2,7 +2,7 @@ import torch
 import torch.utils.data as data
 import pytorch_lightning as pl
 import nibabel as ni
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader,ConcatDataset
 import torchio.transforms as tio
 from torch.nn import functional as func
 import torch
@@ -28,14 +28,14 @@ class FullScan(data.Dataset):
         if selected_slices!=None:
             if selected_slices=='bench':
                 annotated=[]
-                for i in range(self.Y.shape[1]):
-                    if len(torch.unique(self.Y[:,i,...]))>1:
+                for i in range(self.Y.shape[2]):
+                    if len(torch.unique(self.Y[:,:,i]))>1:
                         annotated.append(i)
                 median=int(len(annotated)/2)
                 selected_slices=[annotated[1],annotated[median],annotated[-2]]
-            for i in range(self.Y.shape[1]):
+            for i in range(self.Y.shape[2]):
                 if i not in selected_slices:
-                    self.Y[:,i,...]=self.Y[:,i,...]*0
+                    self.Y[:,:,i]=self.Y[:,:,i]*0
         self.selected_slices=selected_slices
         # self.Y=torch.moveaxis(func.one_hot(self.Y.long()), -1, 1).float()
 
@@ -59,6 +59,21 @@ class FullScan(data.Dataset):
         else:
             x = norm(x[None, None, ...])[0, 0, ...]
         return x
+
+class UnsupervisedScan(data.Dataset):
+    def __init__(self, X,shape=256,z_axis=-1):
+        self.X = X.astype('float32')
+        self.X = self.norm(torch.from_numpy(self.X))[None,...]
+        if z_axis!=0:
+            self.X=torch.moveaxis(self.X,z_axis+1,1)
+        if isinstance(shape,int): shape=(shape,shape) 
+        self.X=func.interpolate(self.X,size=shape,mode='trilinear',align_corners=True)[0]
+        self.X=self.X.unsqueeze(0)
+    def __getitem__(self, index):
+        x = self.X[index]
+        return x.unsqueeze(0)
+    def __len__(self):
+        return len(self.X)
 
 
 class LabelPropDataModule(pl.LightningDataModule):
@@ -89,3 +104,20 @@ class LabelPropDataModule(pl.LightningDataModule):
     
     def test_dataloader(self):
         return DataLoader(self.test_dataset, 1, num_workers=8, pin_memory=False)
+
+class PreTrainingDataModule(pl.LightningDataModule):
+    def __init__(self, img_list,shape=(288,288),z_axis=0):
+        super().__init__()
+        self.img_list=img_list
+        self.shape=shape
+        self.z_axis=z_axis
+    def setup(self, stage=None):
+        training_scans=[]
+        for img in self.img_list:
+            if isinstance(img,str):
+                img=ni.load(img).get_fdata()
+            training_scans.append(UnsupervisedScan(img,shape=self.shape,z_axis=self.z_axis))
+        self.train_dataset=ConcatDataset(training_scans)
+
+    def train_dataloader(self,batch_size=None):
+        return DataLoader(self.train_dataset, 1, num_workers=8,pin_memory=False)

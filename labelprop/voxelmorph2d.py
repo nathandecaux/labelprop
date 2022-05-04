@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
-from monai.networks.nets import UNet,Classifier,DenseNet
+from monai.networks.nets import UNet,Classifier,DenseNet,BasicUNet,DynUNet
 import numpy as np
 import math
 from kornia.geometry.transform import get_perspective_transform,get_affine_matrix2d
@@ -56,26 +56,20 @@ class VxmDense(nn.Module):
         # configure core unet model
         # self.unet_model = Unet(
         #     inshape,
-        #     infeats=(src_feats + trg_feats),
-        #     nb_features=nb_unet_features,
-        #     nb_levels=nb_unet_levels,
-        #     feat_mult=unet_feat_mult,
-        #     nb_conv_per_level=nb_unet_conv_per_level,
-        #     half_res=unet_half_res,
+        #     infeats=(src_feats + trg_feats)
         # )
-        filters=  [16, 32, 32, 32]
-        self.unet_model=UNet(src_feats*2,trg_feats*2,16,filters,strides=(len(filters)-1)*[2],num_res_units=(len(filters)-2))
-
+        filters=  [16, 32, 32, 32,32,16]
+        #DynUNet(spatial_dims, in_channels, out_channels, kernel_size, strides, upsample_kernel_size, filters=None, dropout=None, norm_name=('INSTANCE', {'affine': True}), act_name=('leakyrelu', {'inplace': True, 'negative_slope': 0.01}), deep_supervision=False, deep_supr_num=1, res_block=False, trans_bias=False)
+        # self.unet_model=DynUNet(2,2,2,(3,3,3,3),(1,2,2,2),(3,3,3,3))
+        # self.unet_model=UNet(src_feats*2,trg_feats*2,16,filters,strides=(len(filters)-1)*[2],num_res_units=(len(filters)-2))
+        self.unet_model=BasicUNet(2,src_feats*2,2,features=filters,upsample='nontrainable')
         # configure unet to flow field layer
-        Conv = getattr(nn, 'Conv%dd' % ndims)
-        self.flow = Conv(16, ndims, kernel_size=3, padding=1)
+        # Conv = getattr(nn, 'Conv%dd' % ndims)
+        # self.flow = Conv(16, ndims, kernel_size=3, padding=1)
         # init flow layer with small weights and bias
-        self.flow.weight = nn.Parameter(Normal(0, 1e-5).sample(self.flow.weight.shape))
-        self.flow.bias = nn.Parameter(torch.zeros(self.flow.bias.shape))
+        # self.flow.weight = nn.Parameter(Normal(0, 1e-5).sample(self.flow.weight.shape))
+        # self.flow.bias = nn.Parameter(torch.zeros(self.flow.bias.shape))
         # probabilities are not supported in pytorch
-        if use_probs:
-            raise NotImplementedError(
-                'Flow variance has not been implemented in pytorch - set use_probs to False')
 
         # configure optional resize layers (downsize)
         if not unet_half_res and int_steps > 0 and int_downsize > 1:
@@ -109,9 +103,9 @@ class VxmDense(nn.Module):
 
         # concatenate inputs and propagate unet
         x = torch.cat([source, target], dim=1)
-        x = self.unet_model(x)
+        flow_field = self.unet_model(x)
         # transform into flow field
-        flow_field = self.flow(x)
+        # flow_field = self.flow(x)
         
         # resize flow for integration
         pos_flow = flow_field
@@ -138,7 +132,7 @@ class VxmDense(nn.Module):
 
         # return non-integrated flow field if training
         if not registration:
-            return (y_source, y_target, preint_flow) if self.bidir else (y_source, preint_flow)
+            return (y_source, y_target, preint_flow) if self.bidir else (y_source, pos_flow, preint_flow)
         else:
             if self.bidir:
                 return y_source, pos_flow, neg_flow

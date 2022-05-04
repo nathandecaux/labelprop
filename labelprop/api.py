@@ -9,7 +9,8 @@ import time
 import uuid
 import zipfile
 import io
-
+import hashlib
+import functools
 app=Flask(__name__)
 
 checkpoint_dir='/home/nathan/checkpoints/'
@@ -22,27 +23,68 @@ def create_buf_npz(array_dict):
     buf.seek(0)
     return buf
 
+def timer(func):
+    @functools.wraps(func) #optional line if you went the name of the function to be maintained, to be imported
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        #do somehting with the function
+        value = func(*args, **kwargs)
+        end = time.time()
+        print('Time',end-start)
+        return value
+    return wrapper
+
+@timer
+def hash_array(array):
+    return hashlib.md5(array.tobytes()).hexdigest()
+
+def get_tmp_hashed_img():
+    """
+    List hash from file of /tmp directory
+    Hased images are named as "<hash>_img.npy"
+    """
+    tmp_dir = '/tmp/'
+    files = os.listdir(tmp_dir)
+    hash_list = [f.split('_img')[0] for f in files if f.endswith('_img.npy')]
+    return hash_list
+    
+
 @app.route('/inference',methods=['POST'])
 def inference():
     """
     Receive img and mask arrays as string and checkpoint,shape,z_axis,lab parameters and call propagate_from_ckpt. 
     """
     arrays=np.load(request.files['arrays'])
-    img=arrays['img']
-    mask=arrays['mask']
     infos=json.loads(request.files['params'].read())
+    if 'hash' in infos.keys():
+        hash=infos['hash']
+        img=np.load('/tmp/'+hash+'_img.npy')
+        del infos['hash']
+    else:
+        img=arrays['img']
+        hash=hash_array(img)
+    
     token=str(uuid.uuid4())
+    mask=arrays['mask']
     print(token)
+    #Save img and mask to /tmp folder
+    img_path=join('/tmp/',hash+'_img.npy')
+    mask_path=join('/tmp/',hash+'_mask.npy')
+    np.save(img_path,img)
+    np.save(mask_path,mask)
+
     response=Response(token)
     @response.call_on_close
     def process_after_request():
         Y_up,Y_down,Y_fused=propagate_from_ckpt(img,mask,**infos)
         print(np.unique(Y_up))
-        sessions[token]={'img':img,'mask':mask,'infos':infos}
+        sessions[token]={'img':img_path,'mask':mask_path,'infos':infos}
+        sessions[token]['hash']=hash
         sessions[token]['time']=time.time()
         sessions[token]['Y_up']=Y_up
         sessions[token]['Y_down']=Y_down
         sessions[token]['Y_fused']=Y_fused
+
         
     return response
     # return response
@@ -54,15 +96,23 @@ def inference():
     # Y_up,Y_down,Y_fused=propagate_from_ckpt(img,mask,checkpoint,shape,z_axis,lab)
     # return str(Y_up)+'\n'+str(Y_down)+'\n'+str(Y_fused)
 
+
 @app.route('/training',methods=['POST'])
 def training():
     """
     Receive img and mask arrays as string and checkpoint,shape,z_axis,lab parameters and call propagate_from_ckpt. 
     """
     arrays=np.load(request.files['arrays'])
-    img=arrays['img']
-    mask=arrays['mask']
     infos=json.loads(request.files['params'].read())
+    mask=arrays['mask']
+    if 'hash' in infos.keys():
+        hash=infos['hash']
+        img=np.load('/tmp/'+hash+'_img.npy')
+        del infos['hash']
+    else:
+        img=arrays['img']
+        hash=hash_array(img)
+
     infos['output_dir']=checkpoint_dir
     if infos['pretrained_ckpt']!='':
         infos['pretrained_ckpt']=join(checkpoint_dir,infos['pretrained_ckpt'])
@@ -70,16 +120,23 @@ def training():
         infos['pretrained_ckpt']=None
     token=str(uuid.uuid4())
     print(token)
+    #Save img and mask to /tmp folder
+    img_path=join('/tmp/',hash+'_img.npy')
+    mask_path=join('/tmp/',hash+'_mask.npy')
+    print(img_path)
+    np.save(img_path,img)
+    np.save(mask_path,mask)
     response=Response(token)
     @response.call_on_close
     def process_after_request():
         Y_up,Y_down,Y_fused=train_and_infer(img,mask,**infos)
         print(np.unique(Y_up))
-        sessions[token]={'img':img,'mask':mask,'infos':infos}
+        sessions[token]={'img':img_path,'mask':mask_path,'infos':infos}
         sessions[token]['time']=time.time()
         sessions[token]['Y_up']=Y_up
         sessions[token]['Y_down']=Y_down
         sessions[token]['Y_fused']=Y_fused
+        sessions[token]['hash']=hash
         
     return response
 
@@ -90,6 +147,14 @@ def list_ckpts():
     Return a list of all checkpoints in the checkpoint_dir.
     """
     return ','.join([x for x in os.listdir(checkpoint_dir) if '.ckpt' in x])
+
+@app.route('/list_hash',methods=['GET'])
+def list_hashes():
+    """
+    Return a list of all hash in the sessions dictionnary from get_tmp_hashed_img().
+    """
+    return ','.join(get_tmp_hashed_img())
+ 
 
 @app.route('/download_inference',methods=['GET','POST'])
 def download_inference():
