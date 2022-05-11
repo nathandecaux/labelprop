@@ -97,9 +97,7 @@ class LabelProp(pl.LightningModule):
             loss_seg= Dice().loss(moved_mask,target_mask)
         if field!=None:
             #loss_trans=BendingEnergyLoss()(field) #MONAI
-            # loss_trans=BendingEnergyLoss()(trans)
-            Grad().loss(field,field)
-
+            loss_trans=Grad().loss(field,field)
         return loss_ncc+loss_seg+loss_trans
 
     def blend(self,x,y):

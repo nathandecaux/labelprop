@@ -1,3 +1,4 @@
+from msilib.schema import Class
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -62,7 +63,8 @@ class VxmDense(nn.Module):
         #DynUNet(spatial_dims, in_channels, out_channels, kernel_size, strides, upsample_kernel_size, filters=None, dropout=None, norm_name=('INSTANCE', {'affine': True}), act_name=('leakyrelu', {'inplace': True, 'negative_slope': 0.01}), deep_supervision=False, deep_supr_num=1, res_block=False, trans_bias=False)
         # self.unet_model=DynUNet(2,2,2,(3,3,3,3),(1,2,2,2),(3,3,3,3))
         # self.unet_model=UNet(src_feats*2,trg_feats*2,16,filters,strides=(len(filters)-1)*[2],num_res_units=(len(filters)-2))
-        self.unet_model=BasicUNet(2,src_feats*2,2,features=filters,upsample='nontrainable')
+        # self.unet_model=BasicUNet(2,src_feats*2,2,features=filters,upsample='nontrainable')
+        self.unet_model=MultiLevelNet(inshape=inshape)
         # configure unet to flow field layer
         # Conv = getattr(nn, 'Conv%dd' % ndims)
         # self.flow = Conv(16, ndims, kernel_size=3, padding=1)
@@ -106,7 +108,6 @@ class VxmDense(nn.Module):
         flow_field = self.unet_model(x)
         # transform into flow field
         # flow_field = self.flow(x)
-        
         # resize flow for integration
         pos_flow = flow_field
         if self.resize:
@@ -196,22 +197,95 @@ class AffineGenerator3D(nn.Module):
         
         return x.view(-1,4,4)
     
-class ConvBlock(nn.Module):
+
+
+class MultiLevelNet(nn.Module):
     """
-    Specific convolutional block followed by leakyrelu for unet.
+    Convolutional network generating deformation field with different scales.
     """
 
-    def __init__(self, ndims, in_channels, out_channels, stride=1):
+    def __init__(self,inshape, in_channels=2, levels=3,features=16):
         super().__init__()
+        print('Initializing MultiLevelNet')
+        self.inshape=inshape
+        self.levels=levels
+        self.in_channels=in_channels
+        self.downsample_blocks=self.get_downsample_blocks(in_channels,levels)
+        self.conv_blocks=self.get_conv_blocks(in_channels,levels,features)
+        # self.transformers=self.get_transformer_list(levels,inshape)
+    
+    def get_downsample_blocks(self, in_channels, levels):
+        blocks = nn.ModuleList()
+        for i in range(levels):
+            blocks.append(nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1, stride=2))
+        return blocks
+    
+    def get_conv_blocks(self, in_channels, levels,intermediate_features):
+        """
+        For each levels, create a convolutional block with two Conv Tanh BatchNorm layers
+        """
+        blocks = nn.ModuleList()
+        for i in range(levels+1):
+            blocks.append(nn.Sequential(nn.BatchNorm2d(in_channels),
+                                        nn.LeakyReLU(0.2),
+                                        nn.Conv2d(in_channels, intermediate_features, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(intermediate_features),
+                                        nn.LeakyReLU(0.2),
+                                        nn.Conv2d(intermediate_features, intermediate_features, kernel_size=3, padding=1),
+                                        nn.BatchNorm2d(intermediate_features),
+                                        nn.LeakyReLU(0.2),
+                                        nn.Conv2d(intermediate_features, in_channels, kernel_size=3, padding=1),
+                                        nn.LeakyReLU(0.2),
+                                        nn.Upsample(self.inshape, mode='bilinear',align_corners=True)))
+        return blocks
 
-        Conv = getattr(nn, 'Conv%dd' % ndims)
-        self.main = Conv(in_channels, out_channels, 3, stride, 1)
-        self.activation = nn.LeakyReLU(0.2)
+    def get_transformer_list(self,levels,inshape):
+        """
+        Create a list of spatial transformer for each level.
+        """
+        transformers = nn.ModuleList()
+        for i in range(levels):
+            transformers.append(SpatialTransformer((inshape[0]/(2**i),inshape[1]/(2**i))))
+        return transformers
 
-    def forward(self, x):
-        out = self.main(x)
-        out = self.activation(out)
-        return out
+    def compose_list(self,flows):
+        flows=list(flows)
+        compo=flows[-1]
+        for flow in reversed(flows[:-1]):
+            compo=self.compose_deformation(flow,compo)
+        return compo
+    def compose_deformation(self,flow_i_k,flow_k_j):
+        """ Returns flow_k_j(flow_i_k(.)) flow
+        Args:
+            flow_i_k 
+            flow_k_j
+        Returns:
+            [Tensor]: Flow field flow_i_j = flow_k_j(flow_i_k(.))
+        """        
+        flow_i_j= flow_k_j+self.transformer(flow_i_k,flow_k_j)
+        return flow_i_j
+
+    def forward(self,x):
+        """
+        For each levels, downsample the input and apply the convolutional block.
+        """
+        x_levels=[x]
+        for downsampling in self.downsample_blocks:
+            x_downsampled = downsampling(x_levels[-1])
+            x_levels.append(x_downsampled)
+        # for i in range(len(self.conv_blocks)):
+        #     x_conv = self.conv_blocks[i](x_levels[-1])
+        #     x_levels.append(x_conv)
+        # #For each x_levels,interpolate to the original resolution, and sum x_levels
+        # for i in range(1,len(x_levels)):
+        #     x_levels[i]=F.interpolate(x_levels[i],size=self.inshape,mode='bilinear')
+        for i in range(len(x_levels)):
+            x_levels[i]=self.conv_blocks[i](x_levels[i])
+        return torch.stack(x_levels,dim=0).mean(0)
+
+
+
+    
 
 class SpatialTransformer(nn.Module):
     """

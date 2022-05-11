@@ -21,9 +21,7 @@ class FullScan(data.Dataset):
             self.Y=torch.moveaxis(self.Y,z_axis+1,1)
         if isinstance(shape,int): shape=(shape,shape) 
         self.Y=torch.moveaxis(func.one_hot(self.Y.long()),-1,1)
-        print('Y shape',self.Y.shape)
         self.X,self.Y=self.resample(self.X,self.Y,(self.Y.shape[2],shape[0],shape[1]))
-        print('Y shape after resampling',self.Y.shape)
 
         if selected_slices!=None:
             if selected_slices=='bench':
@@ -97,13 +95,13 @@ class LabelPropDataModule(pl.LightningDataModule):
         self.test_dataset=self.train_dataset
 
     def train_dataloader(self,batch_size=None):
-        return DataLoader(self.train_dataset, 1, num_workers=8,pin_memory=False)
+        return DataLoader(self.train_dataset, 1, num_workers=2,pin_memory=False)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, 1, num_workers=8,pin_memory=False)
+        return DataLoader(self.val_dataset, 1, num_workers=2,pin_memory=False)
     
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, 1, num_workers=8, pin_memory=False)
+        return DataLoader(self.test_dataset, 1, num_workers=2, pin_memory=False)
 
 class PreTrainingDataModule(pl.LightningDataModule):
     def __init__(self, img_list,shape=(288,288),z_axis=0):

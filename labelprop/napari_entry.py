@@ -7,8 +7,8 @@ from torch.nn import functional as func
 from os.path import join
 import shutil
 
-ckpt_dir='/home/nathan/checkpoints/'
-
+# ckpt_dir='/home/nathan/checkpoints/'
+ckpt_dir='F:/checkpoints/'
 def resample(Y,size):
     Y=torch.moveaxis(func.one_hot(Y.long()),-1,0)
     Y=func.interpolate(Y[None,...]*1.,size,mode='trilinear',align_corners=True)[0]

@@ -13,7 +13,8 @@ import hashlib
 import functools
 app=Flask(__name__)
 
-checkpoint_dir='/home/nathan/checkpoints/'
+# checkpoint_dir='/home/nathan/checkpoints/'
+checkpoint_dir='F:/checkpoints/'
     
 global sessions
 sessions={}
@@ -187,4 +188,4 @@ def get_session_list():
 
 
 if __name__=='__main__':
-    app.run(host='0.0.0.0',port=5000)
+    app.run(host='0.0.0.0',port=5000,debug=True)
