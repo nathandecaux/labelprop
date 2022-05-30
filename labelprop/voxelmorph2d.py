@@ -1,4 +1,3 @@
-from msilib.schema import Class
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,7 +6,7 @@ from monai.networks.nets import UNet,Classifier,DenseNet,BasicUNet,DynUNet
 import numpy as np
 import math
 from kornia.geometry.transform import get_perspective_transform,get_affine_matrix2d
-
+from .MultiLevelNet import MultiLevelNet as MLNet
 class VxmDense(nn.Module):
     """
     VoxelMorph network for (unsupervised) nonlinear registration between two images.
@@ -20,7 +19,8 @@ class VxmDense(nn.Module):
                  use_probs=False,
                  src_feats=1,
                  trg_feats=1,
-                 unet_half_res=False):
+                 unet_half_res=False,
+                 sub_levels=3):
         """ 
         Parameters:
             inshape: Input shape. e.g. (192, 192, 192)
@@ -53,22 +53,25 @@ class VxmDense(nn.Module):
         self.inshape=inshape
         ndims = len(inshape)
         assert ndims in [1, 2, 3], 'ndims should be one of 1, 2, or 3. found: %d' % ndims
-
+        self.levels=sub_levels+1
         # configure core unet model
         # self.unet_model = Unet(
         #     inshape,
         #     infeats=(src_feats + trg_feats)
         # )
-        filters=  [16, 32, 32, 32,32,16]
+        filters=  [16, 32, 32, 32]
         #DynUNet(spatial_dims, in_channels, out_channels, kernel_size, strides, upsample_kernel_size, filters=None, dropout=None, norm_name=('INSTANCE', {'affine': True}), act_name=('leakyrelu', {'inplace': True, 'negative_slope': 0.01}), deep_supervision=False, deep_supr_num=1, res_block=False, trans_bias=False)
         # self.unet_model=DynUNet(2,2,2,(3,3,3,3),(1,2,2,2),(3,3,3,3))
         # self.unet_model=UNet(src_feats*2,trg_feats*2,16,filters,strides=(len(filters)-1)*[2],num_res_units=(len(filters)-2))
         # self.unet_model=BasicUNet(2,src_feats*2,2,features=filters,upsample='nontrainable')
-        self.unet_model=MultiLevelNet(inshape=inshape)
+        # self.unet_model=MultiLevelNet(inshape=inshape,levels=sub_levels)
+        self.unet_model=MLNet(inshape=inshape,levels=sub_levels)
+
+        # self.unet_model=SingleLevelNet(inshape)
         # configure unet to flow field layer
         # Conv = getattr(nn, 'Conv%dd' % ndims)
         # self.flow = Conv(16, ndims, kernel_size=3, padding=1)
-        # init flow layer with small weights and bias
+        # # ☺init flow layer with small weights and bias
         # self.flow.weight = nn.Parameter(Normal(0, 1e-5).sample(self.flow.weight.shape))
         # self.flow.bias = nn.Parameter(torch.zeros(self.flow.bias.shape))
         # probabilities are not supported in pytorch
@@ -93,7 +96,7 @@ class VxmDense(nn.Module):
         self.integrate = VecInt(down_shape, int_steps) if int_steps > 0 else None
 
         # configure transformer
-        self.transformer = SpatialTransformer(inshape)
+        self.transformer = SpatialTransformer(inshape,levels=sub_levels+1)
 
     def forward(self, source, target, registration=False):
         '''
@@ -107,7 +110,7 @@ class VxmDense(nn.Module):
         x = torch.cat([source, target], dim=1)
         flow_field = self.unet_model(x)
         # transform into flow field
-        # flow_field = self.flow(x)
+        # flow_field = self.flow(flow_field)
         # resize flow for integration
         pos_flow = flow_field
         if self.resize:
@@ -128,6 +131,7 @@ class VxmDense(nn.Module):
                 pos_flow = self.fullsize(pos_flow)
                 neg_flow = self.fullsize(neg_flow) if self.bidir else None
         # warp image with flow field
+
         y_source = self.transformer(source, pos_flow)
         y_target = self.transformer(target, neg_flow) if self.bidir else None
 
@@ -198,6 +202,47 @@ class AffineGenerator3D(nn.Module):
         return x.view(-1,4,4)
     
 
+class SingleLevelNet(nn.Module):
+    """
+    Convolutional network generating deformation field
+    """
+
+    def __init__(self,inshape, in_channels=2,features=16):
+        super().__init__()
+        print('Initializing MultiLevelNet')
+        self.inshape=inshape
+        self.in_channels=in_channels
+        self.conv_blocks=self.get_conv_blocks(in_channels,features)
+    
+    def get_conv_blocks(self, in_channels, intermediate_features):
+        """
+        For each levels, create a convolutional block with two Conv Tanh BatchNorm layers
+        """
+        # return nn.Sequential(nn.BatchNorm2d(in_channels),
+        #                                 nn.LeakyReLU(0.2),
+        #                                 nn.Conv2d(in_channels, intermediate_features, kernel_size=3, padding=1),
+        #                                 nn.BatchNorm2d(intermediate_features),
+        #                                 nn.LeakyReLU(0.2),
+        #                                 nn.Conv2d(intermediate_features, intermediate_features, kernel_size=3, padding=1),
+        #                                 nn.BatchNorm2d(intermediate_features),
+        #                                 nn.LeakyReLU(0.2),
+        #                                 nn.Conv2d(intermediate_features, in_channels, kernel_size=3, padding=1),
+        #                                 nn.LeakyReLU(0.2))
+        return nn.Sequential(
+            nn.BatchNorm2d(intermediate_features),
+            nn.Conv2d(in_channels, intermediate_features, kernel_size=3, padding=1)
+        )
+    def forward(self,x):
+        """
+        Forward pass of the network
+        Args:
+            x ([Tensor]): Tensor of shape (B,C,H,W)
+        Returns:
+            [Tensor]: Tensor of shape (B,C,H,W)
+        """
+        x=self.conv_blocks(x)
+        print(x.shape)
+        return x.view(-1,self.in_channels,x.shape[-2],x.shape[-1])
 
 class MultiLevelNet(nn.Module):
     """
@@ -211,6 +256,7 @@ class MultiLevelNet(nn.Module):
         self.levels=levels
         self.in_channels=in_channels
         self.downsample_blocks=self.get_downsample_blocks(in_channels,levels)
+        self.shapes=[int(self.inshape[0]/(i+1)) for i in range(levels+1)]
         self.conv_blocks=self.get_conv_blocks(in_channels,levels,features)
         # self.transformers=self.get_transformer_list(levels,inshape)
     
@@ -226,17 +272,24 @@ class MultiLevelNet(nn.Module):
         """
         blocks = nn.ModuleList()
         for i in range(levels+1):
-            blocks.append(nn.Sequential(nn.BatchNorm2d(in_channels),
-                                        nn.LeakyReLU(0.2),
-                                        nn.Conv2d(in_channels, intermediate_features, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(intermediate_features),
-                                        nn.LeakyReLU(0.2),
-                                        nn.Conv2d(intermediate_features, intermediate_features, kernel_size=3, padding=1),
-                                        nn.BatchNorm2d(intermediate_features),
-                                        nn.LeakyReLU(0.2),
-                                        nn.Conv2d(intermediate_features, in_channels, kernel_size=3, padding=1),
-                                        nn.LeakyReLU(0.2),
-                                        nn.Upsample(self.inshape, mode='bilinear',align_corners=True)))
+            # blocks.append(nn.Sequential(nn.BatchNorm2d(in_channels),
+            #                             nn.LeakyReLU(0.2),
+            #                             nn.Conv2d(in_channels, intermediate_features, kernel_size=3, padding=1),
+            #                             nn.BatchNorm2d(intermediate_features),
+            #                             nn.LeakyReLU(0.2),
+            #                             nn.Conv2d(intermediate_features, intermediate_features, kernel_size=3, padding=1),
+            #                             nn.BatchNorm2d(intermediate_features),
+            #                             nn.LeakyReLU(0.2),
+            #                             nn.Conv2d(intermediate_features, in_channels, kernel_size=3, padding=1),
+            #                             nn.LeakyReLU(0.2),
+            #                             nn.Upsample(self.inshape, mode='bilinear',align_corners=True)))
+            blocks.append(nn.Sequential(
+                            nn.BatchNorm2d(in_channels),
+                            nn.Conv2d(in_channels, intermediate_features, kernel_size=3, padding=1),
+                            nn.Tanh(),
+                            nn.BatchNorm2d(intermediate_features),
+                            nn.Conv2d(intermediate_features, in_channels, kernel_size=3, padding=1),
+                            nn.Upsample(self.inshape, mode='bilinear',align_corners=True)))
         return blocks
 
     def get_transformer_list(self,levels,inshape):
@@ -265,7 +318,7 @@ class MultiLevelNet(nn.Module):
         flow_i_j= flow_k_j+self.transformer(flow_i_k,flow_k_j)
         return flow_i_j
 
-    def forward(self,x):
+    def forward(self,x,registration=False):
         """
         For each levels, downsample the input and apply the convolutional block.
         """
@@ -281,6 +334,7 @@ class MultiLevelNet(nn.Module):
         #     x_levels[i]=F.interpolate(x_levels[i],size=self.inshape,mode='bilinear')
         for i in range(len(x_levels)):
             x_levels[i]=self.conv_blocks[i](x_levels[i])
+  
         return torch.stack(x_levels,dim=0).mean(0)
 
 
@@ -292,7 +346,7 @@ class SpatialTransformer(nn.Module):
     N-D Spatial Transformer
     """
 
-    def __init__(self, size, mode='bilinear'):
+    def __init__(self, size, mode='bilinear',levels=4):
         super().__init__()
 
         self.mode = mode
@@ -303,7 +357,8 @@ class SpatialTransformer(nn.Module):
         grid = torch.stack(grids)
         grid = torch.unsqueeze(grid, 0)
         grid = grid.type(torch.FloatTensor)
-
+        # grid= torch.cat([grid]*levels,dim=0)
+        self.levels=levels
         # registering the grid as a buffer cleanly moves it to the GPU, but it also
         # adds it to the state dict. this is annoying since everything in the state dict
         # is included when saving weights to disk, so the model files are way bigger
@@ -328,7 +383,8 @@ class SpatialTransformer(nn.Module):
         elif len(shape) == 3:
             new_locs = new_locs.permute(0, 2, 3, 4, 1)
             new_locs = new_locs[..., [2, 1, 0]]
-
+        # if src.shape[0]==1:
+        #     src=src.repeat(self.levels,1,1,1)
         return F.grid_sample(src, new_locs, align_corners=True, mode=self.mode)
 
 
@@ -408,7 +464,7 @@ class NCC:
         win = [9] * ndims if self.win is None else self.win
 
         # compute filters
-        sum_filt = torch.ones([1, 1, *win]).to("cuda")
+        sum_filt = torch.ones([1, 1, *win]).to(y_pred.device)
 
         pad_no = math.floor(win[0] / 2)
 

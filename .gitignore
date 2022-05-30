@@ -111,3 +111,4 @@ data.zip
 test_popbtox.ckpt
 kill_zombi_process.py
 Dockerfile
+*.png

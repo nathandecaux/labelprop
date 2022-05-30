@@ -5,6 +5,7 @@ import pytorch_lightning as pl
 import kornia
 from .voxelmorph2d import VxmDense,NCC,Grad,Dice
 from monai.losses import BendingEnergyLoss,GlobalMutualInformationLoss
+from kornia.filters import sobel, gaussian_blur2d,canny,spatial_gradient
 class LabelProp(pl.LightningModule):
 
     @property
@@ -75,6 +76,32 @@ class LabelProp(pl.LightningModule):
         """             
         return self.registrator.forward(moving,target,registration=registration)
 
+    # def multi_level_training(self,moving,target,level=3):
+    #     """
+    #     Args:
+    #         moving (Tensor): Moving image (BxCxHxW)
+    #         target ([type]): Fixed image (BxCxHxW)
+    #         registration (bool, optional): If False, also return non-integrated inverse flow field. Else return the integrated one. Defaults to False.
+    #     Returns:
+    #         moved (Tensor): Moved image
+    #         field (Tensor): Deformation field from moving to target
+    #     """ 
+    #     stack_moved=[]
+    #     stack_field=[]
+    #     stack_preint=[]            
+    #     resampling=torch.nn.Upsample(size=self.shape,mode='bilinear',align_corners=True)
+    #     for i in range(level):
+    #         downsampling=nn.Upsample(scale_factor=1/(i+1), mode='bilinear',align_corners=True)
+    #         downsampled_moving=downsampling(moving)
+    #         downsampled_target=downsampling(target)
+    #         moved,field,preint_field=self.forward(downsampled_moving,downsampled_target)
+    #         self.compute_loss(moved,target,field=field)
+    #         stack_moved.append(moved)
+    #         stack_field.append(field)
+    #         stack_preint.append(preint_field)
+    #     return torch.stack(stack_moved,0).mean(0),torch.stack(stack_field,0).mean(0),torch.stack(stack_preint,0).mean(0)
+
+
       
     def compute_loss(self,moved=None,target=None,moved_mask=None,target_mask=None,field=None):
         """
@@ -96,9 +123,21 @@ class LabelProp(pl.LightningModule):
         if moved_mask!=None:
             loss_seg= Dice().loss(moved_mask,target_mask)
         if field!=None:
-            #loss_trans=BendingEnergyLoss()(field) #MONAI
+            # loss_trans=BendingEnergyLoss()(field) #MONAI
             loss_trans=Grad().loss(field,field)
         return loss_ncc+loss_seg+loss_trans
+    
+    def compute_contour_loss(self,img,moved_mask):
+        #Compute contour loss
+        mask_contour=sobel(moved_mask)**2
+        # edges,mag=canny(img)
+        mag=spatial_gradient(img, mode='diff', order=1, normalized=True)
+        mag=torch.sqrt(mag[:,:,0]**2+mag[:,:,1]**2)
+        blurred_mag_sqr=gaussian_blur2d(mag,kernel_size=(15,15),sigma=(5,5))**2
+        overlapping=mask_contour*blurred_mag_sqr
+        #Return cross entropy loss between contour and overlapping
+        return -overlapping.sum()/torch.count_nonzero(input=moved_mask)
+
 
     def blend(self,x,y):
         #For visualization
@@ -145,18 +184,18 @@ class LabelProp(pl.LightningModule):
                         moved_x1,field_up,preint_field=self.forward(x1,x2,registration=False)
                         loss_up.append(self.compute_loss(moved_x1,x2,field=preint_field))
                         fields_up.append(field_up)
-                        if len(fields_up)>0:
-                            field_up_2=self.compose_deformation(fields_up[-1],field_up)
-                            loss_up.append(self.compute_loss(self.apply_deform(X[:,:,i-1],field_up_2),x2))
+                        # if len(fields_up)>0:
+                        #     field_up_2=self.compose_deformation(fields_up[-1],field_up)
+                        #     loss_up.append(self.compute_loss(self.apply_deform(X[:,:,i-1],field_up_2),x2))
 
                     if not self.way=='up':
                         moved_x2,field_down,preint_field=self.forward(x2,x1,registration=False)#
                         fields_down.append(field_down)
                         moved_x2=self.registrator.transformer(x2,field_down)
                         loss_down.append(self.compute_loss(moved_x2,x1,field=preint_field))
-                        if len(fields_down)>0:
-                            field_down_2=self.compose_deformation(fields_down[-1],field_down)
-                            loss_down.append(self.compute_loss(self.apply_deform(X[:,:,i+1],field_down_2),x1))
+                        # if len(fields_down)>0:
+                        #     field_down_2=self.compose_deformation(fields_down[-1],field_down)
+                        #     loss_down.append(self.compute_loss(self.apply_deform(X[:,:,i+1],field_down_2),x1))
    
 
 
@@ -174,14 +213,16 @@ class LabelProp(pl.LightningModule):
                 if not self.way=='down':
                     prop_x_up=X[:,:,chunk[0],...]
                     prop_y_up=Y[:,:,chunk[0],...]
+                    composed_fields_up=self.compose_list(fields_up)
+
                     if self.by_composition:
-                        composed_fields_up=self.compose_list(fields_up)
                         prop_x_up=self.apply_deform(prop_x_up,composed_fields_up)
                         prop_y_up=self.apply_deform(prop_y_up,composed_fields_up)
                     else:
-                        for field_up in fields_up:
+                        for i,field_up in enumerate(fields_up):
                             prop_x_up=self.apply_deform(prop_x_up,field_up)
                             prop_y_up=self.apply_deform(prop_y_up,field_up)
+                            #loss+=self.compute_contour_loss(X[:,:,chunk[0]+i+1],prop_y_up)
                     
                     if self.losses['compo-reg-up']:
                         loss+=self.compute_loss(prop_x_up,X[:,:,chunk[1],...])
@@ -193,15 +234,18 @@ class LabelProp(pl.LightningModule):
                 if not self.way=='up':
                     prop_x_down=X[:,:,chunk[1],...]
                     prop_y_down=Y[:,:,chunk[1],...]
+                    composed_fields_down=self.compose_list(fields_down[::-1])
+
                     if self.by_composition:
-                        composed_fields_down=self.compose_list(fields_down[::-1])
                         prop_x_down=self.apply_deform(prop_x_down,composed_fields_down)
                         prop_y_down=self.apply_deform(prop_y_down,composed_fields_down)
                     else:
+                        i=1
                         for field_down in reversed(fields_down):
                             prop_x_down=self.apply_deform(prop_x_down,field_down)
                             prop_y_down=self.apply_deform(prop_y_down,field_down)
-
+                            #loss+=self.compute_contour_loss(X[:,:,chunk[1]-i],prop_y_down)
+                            i+=1
                     if self.losses['compo-reg-down']:
                         loss+=self.compute_loss(prop_x_down,X[:,:,chunk[0],...])
                     if self.losses['compo-dice-down']:
@@ -219,7 +263,8 @@ class LabelProp(pl.LightningModule):
             #     #This breaks stuff
             #     if self.losses['bidir-cons-reg']:
             #         loss+=self.compute_loss(prop_x_up,prop_x_down)
-
+                # loss+=nn.L1Loss()(self.apply_deform(X[:,:,chunk[0],...], self.compose_deformation(composed_fields_up,composed_fields_down)),X[:,:,chunk[0],...])
+                # loss+=nn.L1Loss()(self.apply_deform(X[:,:,chunk[1],...], self.compose_deformation(composed_fields_down,composed_fields_up)),X[:,:,chunk[1],...])
                 self.log_dict({'loss':loss},prog_bar=True)
                 self.manual_backward(loss)
                 y_opt.step()

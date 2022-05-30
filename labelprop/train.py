@@ -70,23 +70,24 @@ def get_weights(Y):
 
 def fuse_up_and_down(Y_up,Y_down,weights):
     Y=torch.zeros_like(Y_up)
-    plt.cld()
-    if len(weights.shape)>3:
-        plt.plot(weights[1,:,0].flatten(1).mean(1).cpu().detach().numpy().tolist())
-        plt.plot(weights[1,:,1].flatten(1).mean(1).cpu().detach().numpy().tolist())
-    else:
-        plt.plot(weights[1,:,0].cpu().detach().numpy().tolist())
-        plt.plot(weights[1,:,1].cpu().detach().numpy().tolist())
-    plt.show()
 
-    
     for lab in list(range(Y.shape[0]))[1:]:
-        # weights[lab]=F.softmax(weights[lab],1)
         # weights[lab]=weights[lab]/weights[lab].sum(1,keepdim=True)
+        if lab==1:
+            plt.cld()
+            if len(weights.shape)>3:
+                plt.plot(weights[1,:,0].flatten(1).mean(1).cpu().detach().numpy().tolist())
+                plt.plot(weights[1,:,1].flatten(1).mean(1).cpu().detach().numpy().tolist())
+            else:
+                plt.plot(weights[1,:,0].cpu().detach().numpy().tolist())
+                plt.plot(weights[1,:,1].cpu().detach().numpy().tolist())
+            plt.show()
+        # weights[lab]=F.softmax(weights[lab],1)
         for i,corr_maps in enumerate(weights[lab]):
             w=corr_maps
             Y[lab,i]=w[0]*Y_up[lab,i]+w[1]*Y_down[lab,i]
-            Y[0,i]+=1-Y[lab,i]#torch.nn.Sigmoid()(Y[lab:lab+1,i])[0]
+            Y[0,i]+=1-Y[lab,i]#
+            # Y[0,i]+=torch.nn.Sigmoid()(Y[lab:lab+1,i])[0]
 
     Y[0]=Y[0]/(Y.shape[0]-1)
     return Y
@@ -159,8 +160,8 @@ def propagate_by_composition(X,Y,model):
                 composed_field_down=model.compose_list(fields_down[i:chunk[1]][::-1]).to('cuda')
                 Y_up[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[0]].unsqueeze(0).to('cuda'),composed_field_up).cpu().detach()[0]
                 Y_down[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[1]].unsqueeze(0).to('cuda'),composed_field_down).cpu().detach()[0]
-                # weights[lab,i,0]=-NCC([99,99]).loss(model.apply_deform(to_batch(X[chunk[0]],'cuda'),composed_field_up),to_batch(X[i],'cuda'),False).cpu().detach()
-                # weights[lab,i,1]=-NCC([99,99]).loss(model.apply_deform(to_batch(X[chunk[1]],'cuda'),composed_field_down),to_batch(X[i],'cuda'),False).cpu().detach()
+                # weights[lab,i,0]=-NCC([99,99]).loss(model.apply_deform(to_batch(X[chunk[0]],'cuda'),composed_field_up),to_batch(X[i],'cuda'),True).cpu().detach()
+                # weights[lab,i,1]=-NCC([99,99]).loss(model.apply_deform(to_batch(X[chunk[1]],'cuda'),composed_field_down),to_batch(X[i],'cuda'),True).cpu().detach()
                 weights[lab,i,1]=torch.tensor(0.5+np.arctan(i-chunk[0]-(chunk[1]-chunk[0])/2)/3.14)#arctan(C(k−(j−i)/2))/π
                 weights[lab,i,0]=1-weights[lab,i,1]
                 # weights[lab,i,0]=-torch.nn.L1Loss()(model.apply_deform(to_batch(X[chunk[0]],'cuda'),composed_field_up),to_batch(X[i],'cuda')).cpu().detach()

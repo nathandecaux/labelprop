@@ -13,8 +13,8 @@ import hashlib
 import functools
 app=Flask(__name__)
 
-# checkpoint_dir='/home/nathan/checkpoints/'
-checkpoint_dir='F:/checkpoints/'
+checkpoint_dir='/home/nathan/checkpoints/'
+# checkpoint_dir='F:/checkpoints/'
     
 global sessions
 sessions={}
