@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 import kornia
 from .voxelmorph2d import VxmDense,NCC,Grad,Dice
-from monai.losses import BendingEnergyLoss,GlobalMutualInformationLoss
+from monai.losses import BendingEnergyLoss,GlobalMutualInformationLoss,DiceLoss,LocalNormalizedCrossCorrelationLoss
 from kornia.filters import sobel, gaussian_blur2d,canny,spatial_gradient
 class LabelProp(pl.LightningModule):
 
@@ -31,8 +31,9 @@ class LabelProp(pl.LightningModule):
         if isinstance(shape,int):shape=[shape,shape]
         self.registrator= VxmDense(shape,bidir=False,int_downsize=1,int_steps=7)
         self.way=way #If up, learning only "forward" transitions (phi_i->j with j>i). Other choices : "down", "both". Bet you understood ;)
-        self.losses=losses
         self.by_composition=by_composition
+        self.loss_model = MTL_loss(['sim','seg','comp','smooth'])
+        self.losses=losses
         if self.by_composition: print('Using composition for training')
         print('Losses',losses)
         self.save_hyperparameters()
@@ -112,32 +113,41 @@ class LabelProp(pl.LightningModule):
             target_mask : Target mask 
             field : Velocity field (=non integrated)
         """        
-        loss_ncc=0
-        loss_seg=0
-        loss_trans=0
+        losses={}
         if moved!=None:
             # max_peak=F.conv2d(target,target).sum()
             # loss_ncc=-F.conv2d(moved,target).sum()/max_peak#+NCC().loss(moved,target)
-            loss_ncc=NCC().loss(moved,target)
-            # loss_ncc=GlobalMutualInformationLoss()(moved,target) #MONAI
+            # loss_ncc=NCC().loss(moved,target)
+            loss_ncc=GlobalMutualInformationLoss()(moved,target)*0.8 #MONAI
+            # loss_ncc=LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=99)(moved,target) #MONAI
+            # loss_ncc=nn.MSELoss()(moved,target)
+
+            losses['sim']=loss_ncc
         if moved_mask!=None:
-            loss_seg= Dice().loss(moved_mask,target_mask)
+            # loss_seg= Dice().loss(moved_mask,target_mask)
+            loss_seg=DiceLoss(include_background=False)(moved_mask,target_mask)-1
+            losses['seg']=loss_seg
         if field!=None:
             # loss_trans=BendingEnergyLoss()(field) #MONAI
             loss_trans=Grad().loss(field,field)
-        return loss_ncc+loss_seg+loss_trans
-    
+            losses['smooth']=loss_trans
+        #Return dict of losses
+        return losses#{'sim': loss_ncc,'seg':loss_seg,'smooth':loss_trans}
+
     def compute_contour_loss(self,img,moved_mask):
         #Compute contour loss
-        mask_contour=sobel(moved_mask)**2
+        mag,mask_contour=canny(moved_mask[:,1:2])
         # edges,mag=canny(img)
-        mag=spatial_gradient(img, mode='diff', order=1, normalized=True)
-        mag=torch.sqrt(mag[:,:,0]**2+mag[:,:,1]**2)
-        blurred_mag_sqr=gaussian_blur2d(mag,kernel_size=(15,15),sigma=(5,5))**2
-        overlapping=mask_contour*blurred_mag_sqr
-        #Return cross entropy loss between contour and overlapping
-        return -overlapping.sum()/torch.count_nonzero(input=moved_mask)
+        return BendingEnergyLoss()(mag)
 
+    def weighting_loss(self,losses):
+        """
+        Args:
+            losses (dict): Dictionary of losses
+        Returns:
+            loss (Tensor): Weighted loss
+        """        
+        
 
     def blend(self,x,y):
         #For visualization
@@ -153,7 +163,6 @@ class LabelProp(pl.LightningModule):
         for lab in list(range(Y_multi_lab.shape[1]))[1:]:
             chunks=[]
             chunk=[]
-            
             #Binarize ground truth according to the label
             Y=torch.stack([1-Y_multi_lab[:,lab],Y_multi_lab[:,lab]],dim=1)
             #Identifying chunks (i->j)
@@ -172,9 +181,13 @@ class LabelProp(pl.LightningModule):
                 #Sequences of flow fields (field_up=forward, field_down=backward)
                 fields_up=[]
                 fields_down=[]
-                loss_up=[]
-                loss_down=[]
-                loss=[]
+                loss_up_sim=[]
+                loss_up_smooth=[]
+                loss_down_sim=[]
+                loss_down_smooth=[]
+                loss=0
+                losses={'sim':None,'seg':None,'comp':None,'smooth':None}
+
 
                 for i in range(chunk[0],chunk[1]):
                     #Computing flow fields and loss for each hop from chunk[0] to chunk[1]
@@ -182,7 +195,12 @@ class LabelProp(pl.LightningModule):
                     x2=X[:,:,i+1,...]
                     if not self.way=='down':
                         moved_x1,field_up,preint_field=self.forward(x1,x2,registration=False)
-                        loss_up.append(self.compute_loss(moved_x1,x2,field=preint_field))
+                        cur_loss=self.compute_loss(moved_x1,x2,field=preint_field)
+                        loss_up_sim.append(cur_loss['sim'])
+                        loss_up_smooth.append(cur_loss['smooth'])
+                        # field_down=self.registrator.integrate(-preint_field)
+                        # moved_x2=self.registrator.transformer(x2,field_down)
+                        # loss_up_sim.append(self.compute_loss(moved_x2,x1)['sim'])
                         fields_up.append(field_up)
                         # if len(fields_up)>0:
                         #     field_up_2=self.compose_deformation(fields_up[-1],field_up)
@@ -192,7 +210,13 @@ class LabelProp(pl.LightningModule):
                         moved_x2,field_down,preint_field=self.forward(x2,x1,registration=False)#
                         fields_down.append(field_down)
                         moved_x2=self.registrator.transformer(x2,field_down)
-                        loss_down.append(self.compute_loss(moved_x2,x1,field=preint_field))
+                        cur_loss=self.compute_loss(moved_x2,x1,field=preint_field)
+                        loss_down_sim.append(cur_loss['sim'])
+                        loss_down_smooth.append(cur_loss['smooth'])
+                        # field_up=self.registrator.integrate(-preint_field)
+                        # moved_x1=self.registrator.transformer(x1,field_up)
+                        # loss_down_sim.append(self.compute_loss(moved_x1,x2)['sim'])
+                        
                         # if len(fields_down)>0:
                         #     field_down_2=self.compose_deformation(fields_down[-1],field_down)
                         #     loss_down.append(self.compute_loss(self.apply_deform(X[:,:,i+1],field_down_2),x1))
@@ -205,9 +229,9 @@ class LabelProp(pl.LightningModule):
                 elif self.way=='down':
                     loss=torch.stack(loss_down).mean()
                 else:
-                    loss_up=torch.stack(loss_up).mean()
-                    loss_down=torch.stack(loss_down).mean()
-                    loss=(loss_up+loss_down)
+                    losses['sim']=torch.stack(loss_up_sim).mean()+torch.stack(loss_down_sim).mean()
+                    losses['smooth']=torch.stack(loss_up_smooth).mean()+torch.stack(loss_down_smooth).mean()
+                    # loss=(loss_up+loss_down)
                 
                 # Computing registration from the sequence of flow fields
                 if not self.way=='down':
@@ -222,13 +246,13 @@ class LabelProp(pl.LightningModule):
                         for i,field_up in enumerate(fields_up):
                             prop_x_up=self.apply_deform(prop_x_up,field_up)
                             prop_y_up=self.apply_deform(prop_y_up,field_up)
-                            #loss+=self.compute_contour_loss(X[:,:,chunk[0]+i+1],prop_y_up)
+                            losses['contours']=self.compute_contour_loss(X[:,:,chunk[0]+i+1],prop_y_up)
                     
                     if self.losses['compo-reg-up']:
-                        loss+=self.compute_loss(prop_x_up,X[:,:,chunk[1],...])
+                        losses['comp']=self.compute_loss(prop_x_up,X[:,:,chunk[1],...])['sim']
                     if self.losses['compo-dice-up']:
-                        dice_loss=self.compute_loss(moved_mask=prop_y_up,target_mask=Y[:,:,chunk[1],...])
-                        loss+=dice_loss
+                        dice_loss=self.compute_loss(moved_mask=prop_y_up,target_mask=Y[:,:,chunk[1],...])['seg']
+                        losses['seg']=dice_loss
                         dices_prop.append(dice_loss)
 
                 if not self.way=='up':
@@ -244,13 +268,13 @@ class LabelProp(pl.LightningModule):
                         for field_down in reversed(fields_down):
                             prop_x_down=self.apply_deform(prop_x_down,field_down)
                             prop_y_down=self.apply_deform(prop_y_down,field_down)
-                            #loss+=self.compute_contour_loss(X[:,:,chunk[1]-i],prop_y_down)
+                            losses['contours']+=self.compute_contour_loss(X[:,:,chunk[1]-i],prop_y_down)
                             i+=1
                     if self.losses['compo-reg-down']:
-                        loss+=self.compute_loss(prop_x_down,X[:,:,chunk[0],...])
+                        losses['comp']+=self.compute_loss(prop_x_down,X[:,:,chunk[0],...])['sim']
                     if self.losses['compo-dice-down']:
-                        dice_loss=self.compute_loss(moved_mask=prop_y_down,target_mask=Y[:,:,chunk[0],...])
-                        loss+=dice_loss
+                        dice_loss=self.compute_loss(moved_mask=prop_y_down,target_mask=Y[:,:,chunk[0],...])['seg']
+                        losses['seg']+=dice_loss
                         dices_prop.append(dice_loss)
 
 
@@ -265,6 +289,8 @@ class LabelProp(pl.LightningModule):
             #         loss+=self.compute_loss(prop_x_up,prop_x_down)
                 # loss+=nn.L1Loss()(self.apply_deform(X[:,:,chunk[0],...], self.compose_deformation(composed_fields_up,composed_fields_down)),X[:,:,chunk[0],...])
                 # loss+=nn.L1Loss()(self.apply_deform(X[:,:,chunk[1],...], self.compose_deformation(composed_fields_down,composed_fields_up)),X[:,:,chunk[1],...])
+                loss=losses['seg']+losses['sim']+losses['contours']#+losses['smooth']#torch.stack([v for v in losses.values()]).mean() 
+                # loss=self.loss_model(losses)
                 self.log_dict({'loss':loss},prog_bar=True)
                 self.manual_backward(loss)
                 y_opt.step()
@@ -291,3 +317,32 @@ class LabelProp(pl.LightningModule):
 
     def hardmax(self,Y,dim):
         return torch.moveaxis(F.one_hot(torch.argmax(Y,dim),self.n_classes), -1, dim)
+
+
+class MTL_loss(torch.nn.Module):
+    def __init__(self, losses):
+        super().__init__()
+        start=1.
+        self.lw={}
+        self.sigmas = nn.ParameterDict()
+ 
+        for k in losses:
+            self.lw[k]= start
+        self.set_dict(self.lw)
+
+    def set_dict(self, dic):
+        self.lw = dic
+        for k in dic.keys():
+            if dic[k] > 0:
+                self.sigmas[k] = nn.Parameter(torch.ones(1) * dic[k])
+
+    def forward(self, loss_dict):
+        loss = 0
+        with torch.set_grad_enabled(True):
+            for k in loss_dict.keys():
+                if k in self.lw.keys():
+                    loss +=0.5 * loss_dict[k] / (self.sigmas[k])**2 + torch.log(self.sigmas[k])
+                    
+  
+                  
+        return loss

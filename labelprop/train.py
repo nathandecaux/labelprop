@@ -168,6 +168,7 @@ def propagate_by_composition(X,Y,model):
                 # weights[lab,i,1]=-torch.nn.L1Loss()(model.apply_deform(to_batch(X[chunk[1]],'cuda'),composed_field_down),to_batch(X[i],'cuda')).cpu().detach()
     # weights[1,:,1]=get_weights(Y)
     # weights[1,:,0]=1-weights[1,:,1]
+    # weights=torch.nn.Softmax(dim=2)(weights)
     Y_up[0]=(torch.sum(Y_up[1:],0)==0)*1.
     Y_down[0]=(torch.sum(Y_down[1:],0)==0)*1.
     Y_fused=fuse_up_and_down(Y_up,Y_down,weights)

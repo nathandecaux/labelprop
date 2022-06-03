@@ -272,17 +272,6 @@ class MultiLevelNet(nn.Module):
         """
         blocks = nn.ModuleList()
         for i in range(levels+1):
-            # blocks.append(nn.Sequential(nn.BatchNorm2d(in_channels),
-            #                             nn.LeakyReLU(0.2),
-            #                             nn.Conv2d(in_channels, intermediate_features, kernel_size=3, padding=1),
-            #                             nn.BatchNorm2d(intermediate_features),
-            #                             nn.LeakyReLU(0.2),
-            #                             nn.Conv2d(intermediate_features, intermediate_features, kernel_size=3, padding=1),
-            #                             nn.BatchNorm2d(intermediate_features),
-            #                             nn.LeakyReLU(0.2),
-            #                             nn.Conv2d(intermediate_features, in_channels, kernel_size=3, padding=1),
-            #                             nn.LeakyReLU(0.2),
-            #                             nn.Upsample(self.inshape, mode='bilinear',align_corners=True)))
             blocks.append(nn.Sequential(
                             nn.BatchNorm2d(in_channels),
                             nn.Conv2d(in_channels, intermediate_features, kernel_size=3, padding=1),
