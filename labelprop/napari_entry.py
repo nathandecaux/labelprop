@@ -1,12 +1,14 @@
 
 from .train import inference,train
-from .DataLoading import LabelPropDataModule
+from.utils import get_successive_fields,propagate_by_composition,SuperST
+from .DataLoading import LabelPropDataModule,PreTrainingDataModule
 import numpy as np
 import torch
 from torch.nn import functional as func
 from os.path import join
 import shutil
-
+import nibabel as ni
+import pathlib
 ckpt_dir='/home/nathan/checkpoints/'
 # ckpt_dir='F:/checkpoints/'
 def resample(Y,size):
@@ -50,14 +52,18 @@ def train_and_infer(img,mask,pretrained_ckpt,shape,max_epochs,z_axis=2,output_di
     by_composition=True
     n_classes=len(np.unique(mask))
     losses={'compo-reg-up':True,'compo-reg-down':True,'compo-dice-up':True,'compo-dice-down':True,'bidir-cons-reg':False,'bidir-cons-dice':False}
-    model_PARAMS={'n_classes':n_classes,'way':way,'shape':shape,'selected_slices':None,'losses':losses,'by_composition':False}
+    model_PARAMS={'n_classes':n_classes,'way':way,'shape':shape,'selected_slices':None,'losses':losses,'by_composition':False,'unsupervised':pretraining}
 
     #Dataloading
-    dm=LabelPropDataModule(img_path=img,mask_path=mask,lab='all',shape=shape,selected_slices=None,z_axis=z_axis)
-
+    if not pretraining:
+        dm=LabelPropDataModule(img_path=img,mask_path=mask,lab='all',shape=shape,selected_slices=None,z_axis=z_axis)
+    else:
+        dm=PreTrainingDataModule(img_list=[img],shape=shape,z_axis=z_axis)
     #Training and testing
     trained_model,best_ckpt=train(datamodule=dm,model_PARAMS=model_PARAMS,max_epochs=max_epochs,ckpt=pretrained_ckpt,pretraining=pretraining)
     best_ckpt=str(best_ckpt)
+
+    dm=LabelPropDataModule(img_path=img,mask_path=mask,lab='all',shape=shape,selected_slices=None,z_axis=z_axis)
     Y_up,Y_down,Y_fused=inference(datamodule=dm,model_PARAMS=model_PARAMS,ckpt=best_ckpt)
     if z_axis!=0:
         Y_up=torch.moveaxis(Y_up,0,z_axis)
@@ -71,4 +77,48 @@ def train_and_infer(img,mask,pretrained_ckpt,shape,max_epochs,z_axis=2,output_di
 
     shutil.copyfile(best_ckpt,join(output_dir,f'{name.split(".ckpt")[-1]}.ckpt'))
     return Y_up.cpu().detach().numpy(),Y_down.cpu().detach().numpy(),Y_fused.cpu().detach().numpy()
+
+
+def pretrain(img_list,shape,z_axis=2,output_dir='~/label_prop_checkpoints',name='',max_epochs=100):
+    shape=(shape,shape)
+    unsupervised=True
+    model_PARAMS={'shape':shape,'unsupervised':unsupervised}
+    dm=PreTrainingDataModule(img_list=img_list,shape=shape,z_axis=z_axis)
+    trained_model,best_ckpt=train(datamodule=dm,model_PARAMS=model_PARAMS,max_epochs=max_epochs)
+    best_ckpt=str(best_ckpt)
+    if name=='': name=best_ckpt.split('/')[-1]
+
+    # 
+    #copy file to output_dir with pathlib, create folder if it doesn't exist
+    pathlib.Path(output_dir).mkdir(parents=True,exist_ok=True)
+    shutil.copyfile(best_ckpt,join(output_dir,f'{name.split(".ckpt")[-1]}.ckpt'))
+    #Get successive deformation fields
+    trained_model.load_from_checkpoint(checkpoint_path=best_ckpt,device='cuda')
+    for i,scan_dataset in enumerate(dm.train_dataloader().dataset.datasets):
+        X=scan_dataset[0]
+        fields_up,fields_down=get_successive_fields(X, trained_model.to('cuda'))
+        fields_up=torch.stack(tensors=fields_up,dim=0).detach().cpu()
+        fields_down=torch.stack(tensors=fields_down,dim=0).detach().cpu()
+        name=scan_dataset.name.split('/')[-1]
+        #Save fields
+        torch.save(fields_up,join(output_dir,f'{name}_up.pt'))
+        torch.save(fields_down,join(output_dir,f'{name}_down.pt'))
+
+def propagate_from_fields(img,mask,fields_up,fields_down,shape,z_axis=2,output_dir='',name=''):
+    true_shape=img.shape
+    shape=(shape,shape)
+    dm=LabelPropDataModule(img_path=img,mask_path=mask,lab='all',shape=shape,selected_slices=None,z_axis=z_axis)
+    st=SuperST(size=shape)
+    X,Y=dm.train_dataloader().dataset[0]
+    Y_up,Y_down,Y_fused=propagate_by_composition(X, Y, st,(fields_up,fields_down))
+    
+    if z_axis!=0:
+        Y_up=torch.moveaxis(Y_up,0,z_axis)
+        Y_down=torch.moveaxis(Y_down,0,z_axis)
+        Y_fused=torch.moveaxis(Y_fused,0,z_axis)
+    Y_up=resample(Y_up,true_shape)
+    Y_down=resample(Y_down,true_shape)
+    Y_fused=resample(Y_fused,true_shape)
+    return Y_up.cpu().detach().numpy(),Y_down.cpu().detach().numpy(),Y_fused.cpu().detach().numpy()
+
 

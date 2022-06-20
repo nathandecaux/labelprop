@@ -62,18 +62,18 @@ class VxmDense(nn.Module):
         filters=  [16, 32, 32, 32]
         #DynUNet(spatial_dims, in_channels, out_channels, kernel_size, strides, upsample_kernel_size, filters=None, dropout=None, norm_name=('INSTANCE', {'affine': True}), act_name=('leakyrelu', {'inplace': True, 'negative_slope': 0.01}), deep_supervision=False, deep_supr_num=1, res_block=False, trans_bias=False)
         # self.unet_model=DynUNet(2,2,2,(3,3,3,3),(1,2,2,2),(3,3,3,3))
-        # self.unet_model=UNet(src_feats*2,trg_feats*2,16,filters,strides=(len(filters)-1)*[2],num_res_units=(len(filters)-2))
+        self.unet_model=UNet(src_feats*2,trg_feats*2,16,filters,strides=(len(filters)-1)*[2],num_res_units=(len(filters)-2))
         # self.unet_model=BasicUNet(2,src_feats*2,2,features=filters,upsample='nontrainable')
         # self.unet_model=MultiLevelNet(inshape=inshape,levels=sub_levels)
-        self.unet_model=MLNet(inshape=inshape,levels=sub_levels)
+        # self.unet_model=MLNet(inshape=inshape,levels=sub_levels)
 
         # self.unet_model=SingleLevelNet(inshape)
         # configure unet to flow field layer
-        # Conv = getattr(nn, 'Conv%dd' % ndims)
-        # self.flow = Conv(16, ndims, kernel_size=3, padding=1)
-        # # ☺init flow layer with small weights and bias
-        # self.flow.weight = nn.Parameter(Normal(0, 1e-5).sample(self.flow.weight.shape))
-        # self.flow.bias = nn.Parameter(torch.zeros(self.flow.bias.shape))
+        Conv = getattr(nn, 'Conv%dd' % ndims)
+        self.flow = Conv(16, ndims, kernel_size=3, padding=1)
+        # ☺init flow layer with small weights and bias
+        self.flow.weight = nn.Parameter(Normal(0, 1e-5).sample(self.flow.weight.shape))
+        self.flow.bias = nn.Parameter(torch.zeros(self.flow.bias.shape))
         # probabilities are not supported in pytorch
 
         # configure optional resize layers (downsize)
@@ -110,7 +110,7 @@ class VxmDense(nn.Module):
         x = torch.cat([source, target], dim=1)
         flow_field = self.unet_model(x)
         # transform into flow field
-        # flow_field = self.flow(flow_field)
+        flow_field = self.flow(flow_field)
         # resize flow for integration
         pos_flow = flow_field
         if self.resize:

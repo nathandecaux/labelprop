@@ -14,26 +14,32 @@ class FullScan(data.Dataset):
         if isinstance(lab,int):
             Y= 1.*(Y==lab)
         self.Y=Y*1.
-        self.X = self.norm(torch.from_numpy(self.X))[None,...]
+        self.X = self.norm(torch.from_numpy(self.X),z_axis)[None,...]
         self.Y = torch.from_numpy(self.Y)[None,...]
         if z_axis!=0:
             self.X=torch.moveaxis(self.X,z_axis+1,1)
             self.Y=torch.moveaxis(self.Y,z_axis+1,1)
+        
         if isinstance(shape,int): shape=(shape,shape) 
         self.Y=torch.moveaxis(func.one_hot(self.Y.long()),-1,1)
         self.X,self.Y=self.resample(self.X,self.Y,(self.Y.shape[2],shape[0],shape[1]))
 
         if selected_slices!=None:
             if selected_slices=='bench':
-                annotated=[]
+                #Create annotated dict with label number as key and list of slices as value
+                annotated={}
+                for lab in range(1,self.Y.shape[1]): annotated[lab]=[]
                 for i in range(self.Y.shape[2]):
-                    if len(torch.unique(self.Y[:,:,i]))>1:
-                        annotated.append(i)
-                median=int(len(annotated)/2)
-                selected_slices=[annotated[1],annotated[median],annotated[-2]]
-            for i in range(self.Y.shape[2]):
-                if i not in selected_slices:
-                    self.Y[:,:,i]=self.Y[:,:,i]*0
+                    for lab in range(1,self.Y.shape[1]):
+                        if self.Y[0,lab,i].sum()>0:
+                            annotated[lab].append(i)
+                selected_slices={}
+                for lab in range(1,self.Y.shape[1]):
+                    median=int(len(annotated[lab])/2)
+                    selected_slices[lab]=[annotated[lab][0],annotated[lab][median],annotated[lab][-1]]
+                    for i in range(self.Y.shape[2]):
+                        if i not in selected_slices[lab]:
+                            self.Y[:,lab,i]=self.Y[:,lab,i]*0
         self.selected_slices=selected_slices
         # self.Y=torch.moveaxis(func.one_hot(self.Y.long()), -1, 1).float()
 
@@ -47,8 +53,17 @@ class FullScan(data.Dataset):
         return X,Y
     def __len__(self):
         return len(self.Y)
+    
 
-    def norm(self, x):
+
+    # def norm(self, x,z_axis=-1):
+    #     # x=torch.moveaxis(x, z_axis, 0)
+    #     # for i in range(x.shape[0]):
+    #     #     x[i]=x[i]-x[i].min()/(x[i].max()-x[i].min())
+    #     # x=torch.moveaxis(x, 0, z_axis)
+    #     x=x-x.min()/(x.max()-x.min())
+    #     return x
+    def norm(self, x,z_axis):
         norm = tio.RescaleIntensity((0, 1))
         if len(x.shape)==4:
             x = norm(x)
@@ -59,19 +74,33 @@ class FullScan(data.Dataset):
         return x
 
 class UnsupervisedScan(data.Dataset):
-    def __init__(self, X,shape=256,z_axis=-1):
+    def __init__(self, X,shape=256,z_axis=-1,name=''):
         self.X = X.astype('float32')
-        self.X = self.norm(torch.from_numpy(self.X))[None,...]
+        self.X = self.norm(torch.from_numpy(self.X))[None,None,...]
+        print('before interpol',self.X.shape)
+        self.name=name
         if z_axis!=0:
-            self.X=torch.moveaxis(self.X,z_axis+1,1)
+            self.X=torch.moveaxis(self.X,z_axis+2,2)
         if isinstance(shape,int): shape=(shape,shape) 
-        self.X=func.interpolate(self.X,size=shape,mode='trilinear',align_corners=True)[0]
-        self.X=self.X.unsqueeze(0)
+        self.true_shape=(self.X.shape[-2],self.X.shape[-1])
+        self.X=func.interpolate(self.X,size=(self.X.shape[2],shape[0],shape[1]),mode='trilinear',align_corners=True)[0]
+        print(self.X.shape)
+
     def __getitem__(self, index):
         x = self.X[index]
         return x.unsqueeze(0)
     def __len__(self):
         return len(self.X)
+    def norm(self, x):
+        norm = tio.RescaleIntensity((0, 1))
+        if len(x.shape)==4:
+            x = norm(x)
+        elif len(x.shape)==3:
+            x= norm(x[:, None, ...])[:,0, ...]
+        else:
+            x = norm(x[None, None, ...])[0, 0, ...]
+        return x
+
 
 
 class LabelPropDataModule(pl.LightningDataModule):
@@ -91,10 +120,11 @@ class LabelPropDataModule(pl.LightningDataModule):
             img=self.img_path
             mask=self.mask_path
         self.train_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=self.selected_slices,z_axis=self.z_axis)
-        self.val_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=None,z_axis=self.z_axis)
+        if self.selected_slices!=None:
+            self.val_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=None,z_axis=self.z_axis)
         self.test_dataset=self.train_dataset
 
-    def train_dataloader(self,batch_size=None):
+    def train_dataloader(self,batch_size=1):
         return DataLoader(self.train_dataset, 1, num_workers=2,pin_memory=False)
 
     def val_dataloader(self):
@@ -111,11 +141,14 @@ class PreTrainingDataModule(pl.LightningDataModule):
         self.z_axis=z_axis
     def setup(self, stage=None):
         training_scans=[]
-        for img in self.img_list:
+        for i,img in enumerate(self.img_list):
+            img_name=str(i)
             if isinstance(img,str):
+                img_name=img
                 img=ni.load(img).get_fdata()
-            training_scans.append(UnsupervisedScan(img,shape=self.shape,z_axis=self.z_axis))
+
+            training_scans.append(UnsupervisedScan(img,shape=self.shape,z_axis=self.z_axis,name=img_name))
         self.train_dataset=ConcatDataset(training_scans)
 
     def train_dataloader(self,batch_size=None):
-        return DataLoader(self.train_dataset, 1, num_workers=8,pin_memory=False)
+        return DataLoader(self.train_dataset, 1, num_workers=8,pin_memory=False,shuffle=False)

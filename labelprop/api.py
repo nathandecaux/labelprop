@@ -11,6 +11,8 @@ import zipfile
 import io
 import hashlib
 import functools
+import logging
+from copy import deepcopy
 app=Flask(__name__)
 
 checkpoint_dir='/home/nathan/checkpoints/'
@@ -77,14 +79,18 @@ def inference():
     response=Response(token)
     @response.call_on_close
     def process_after_request():
-        Y_up,Y_down,Y_fused=propagate_from_ckpt(img,mask,**infos)
-        print(np.unique(Y_up))
-        sessions[token]={'img':img_path,'mask':mask_path,'infos':infos}
-        sessions[token]['hash']=hash
-        sessions[token]['time']=time.time()
-        sessions[token]['Y_up']=Y_up
-        sessions[token]['Y_down']=Y_down
-        sessions[token]['Y_fused']=Y_fused
+        try:
+            Y_up,Y_down,Y_fused=propagate_from_ckpt(img,mask,**infos)
+            print(np.unique(Y_up))
+            sessions[token]={'img':img_path,'mask':mask_path,'infos':infos}
+            sessions[token]['hash']=hash
+            sessions[token]['time']=time.time()
+            sessions[token]['Y_up']=Y_up
+            sessions[token]['Y_down']=Y_down
+            sessions[token]['Y_fused']=Y_fused
+        except Exception as e:
+            logging.exception("message")
+            sessions[token]={'error':deepcopy(str(e))}
 
         
     return response
@@ -130,14 +136,18 @@ def training():
     response=Response(token)
     @response.call_on_close
     def process_after_request():
-        Y_up,Y_down,Y_fused=train_and_infer(img,mask,**infos)
-        print(np.unique(Y_up))
-        sessions[token]={'img':img_path,'mask':mask_path,'infos':infos}
-        sessions[token]['time']=time.time()
-        sessions[token]['Y_up']=Y_up
-        sessions[token]['Y_down']=Y_down
-        sessions[token]['Y_fused']=Y_fused
-        sessions[token]['hash']=hash
+        try:
+            Y_up,Y_down,Y_fused=train_and_infer(img,mask,**infos)
+            print(np.unique(Y_up))
+            sessions[token]={'img':img_path,'mask':mask_path,'infos':infos}
+            sessions[token]['time']=time.time()
+            sessions[token]['Y_up']=Y_up
+            sessions[token]['Y_down']=Y_down
+            sessions[token]['Y_fused']=Y_fused
+            sessions[token]['hash']=hash
+        except Exception as e:
+            logging.exception("message")
+            sessions[token]={'error':e}
         
     return response
 
@@ -163,13 +173,17 @@ def download_inference():
     Return the inference results as a zip file.
     """
     token=request.args['token']
-    Y_up=sessions[token]['Y_up']
-    Y_down=sessions[token]['Y_down']
-    Y_fused=sessions[token]['Y_fused']
-    #Compress arrays with np.savez_compressed
-    arrays={'Y_up':Y_up.astype('uint8'),'Y_down':Y_down.astype('uint8'),'Y_fused':Y_fused.astype('uint8')}
-    buf=create_buf_npz(arrays)
-    return Response(buf)#send_file(buf,mimetype='application/x-zip-compressed',as_attachment=False,attachment_filename='inference_results.npz')
+    if 'error' in sessions[token].keys():
+        print('HELLO',sessions[token]['error'])
+        return str(sessions[token]['error'])
+    else:
+        Y_up=sessions[token]['Y_up']
+        Y_down=sessions[token]['Y_down']
+        Y_fused=sessions[token]['Y_fused']
+        #Compress arrays with np.savez_compressed
+        arrays={'Y_up':Y_up.astype('uint8'),'Y_down':Y_down.astype('uint8'),'Y_fused':Y_fused.astype('uint8')}
+        buf=create_buf_npz(arrays)
+        return Response(buf)#send_file(buf,mimetype='application/x-zip-compressed',as_attachment=False,attachment_filename='inference_results.npz')
 
 @app.route('/get_session_info',methods=['GET'])
 def get_session_info():

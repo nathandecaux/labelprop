@@ -6,6 +6,8 @@ import kornia
 from .voxelmorph2d import VxmDense,NCC,Grad,Dice
 from monai.losses import BendingEnergyLoss,GlobalMutualInformationLoss,DiceLoss,LocalNormalizedCrossCorrelationLoss
 from kornia.filters import sobel, gaussian_blur2d,canny,spatial_gradient
+from kornia.losses import HausdorffERLoss,SSIMLoss ,MS_SSIMLoss
+from .utils import *
 class LabelProp(pl.LightningModule):
 
     @property
@@ -22,7 +24,7 @@ class LabelProp(pl.LightningModule):
         return x
     
 
-    def __init__(self,n_channels=1,n_classes=2,learning_rate=5e-3,weight_decay=1e-8,way='up',shape=256,selected_slices=None,losses={},by_composition=False):
+    def __init__(self,n_channels=1,n_classes=2,learning_rate=5e-3,weight_decay=1e-8,way='both',shape=256,selected_slices=None,losses={},by_composition=False,unsupervised=False):
         super().__init__()
         self.n_classes = n_classes
         self.learning_rate=learning_rate
@@ -32,7 +34,8 @@ class LabelProp(pl.LightningModule):
         self.registrator= VxmDense(shape,bidir=False,int_downsize=1,int_steps=7)
         self.way=way #If up, learning only "forward" transitions (phi_i->j with j>i). Other choices : "down", "both". Bet you understood ;)
         self.by_composition=by_composition
-        self.loss_model = MTL_loss(['sim','seg','comp','smooth'])
+        self.unsupervised=unsupervised
+        # self.loss_model = MTL_loss(['sim','seg','comp','smooth'])
         self.losses=losses
         if self.by_composition: print('Using composition for training')
         print('Losses',losses)
@@ -117,16 +120,18 @@ class LabelProp(pl.LightningModule):
         if moved!=None:
             # max_peak=F.conv2d(target,target).sum()
             # loss_ncc=-F.conv2d(moved,target).sum()/max_peak#+NCC().loss(moved,target)
-            # loss_ncc=NCC().loss(moved,target)
-            loss_ncc=GlobalMutualInformationLoss()(moved,target)*0.8 #MONAI
+            loss_ncc=NCC().loss(moved,target)
+            # loss_ncc=GlobalMutualInformationLoss()(moved,target)#MONAI
             # loss_ncc=LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=99)(moved,target) #MONAI
             # loss_ncc=nn.MSELoss()(moved,target)
-
+            # loss_ncc=0.05*self.mssim(moved,target)
             losses['sim']=loss_ncc
         if moved_mask!=None:
             # loss_seg= Dice().loss(moved_mask,target_mask)
-            loss_seg=DiceLoss(include_background=False)(moved_mask,target_mask)-1
+
+            loss_seg=DiceLoss(include_background=False,softmax=False)(moved_mask,target_mask)-1
             losses['seg']=loss_seg
+            # losses['seg']-=0.005*HausdorffERLoss()(moved_mask[:,1:],target_mask[:,1:].long())
         if field!=None:
             # loss_trans=BendingEnergyLoss()(field) #MONAI
             loss_trans=Grad().loss(field,field)
@@ -156,157 +161,232 @@ class LabelProp(pl.LightningModule):
         return blended
 
     def training_step(self, batch, batch_nb):
-        X,Y=batch # X : Full scan (1x1xLxHxW) | Y : Ground truth (1xCxLxHxW)
-        y_opt=self.optimizers()
-        dices_prop=[]
-        Y_multi_lab=torch.clone(Y)
-        for lab in list(range(Y_multi_lab.shape[1]))[1:]:
-            chunks=[]
-            chunk=[]
-            #Binarize ground truth according to the label
-            Y=torch.stack([1-Y_multi_lab[:,lab],Y_multi_lab[:,lab]],dim=1)
-            #Identifying chunks (i->j)
-            for i in range(X.shape[2]):
-                y=Y[:,:,i,...]
-                if len(torch.unique(torch.argmax(y,1)))>1:
-                    chunk.append(i)
-                if len(chunk)==2:
-                    chunks.append(chunk)
-                    chunk=[i]
-            if self.current_epoch==0:
-                print(lab,chunks)
+        if self.unsupervised:
+            X=batch # X : Full scan (1x1xLxHxW)
+            opt=self.optimizers() 
+            losses=0
             
-            for chunk in chunks:
-                y_opt.zero_grad()
-                #Sequences of flow fields (field_up=forward, field_down=backward)
-                fields_up=[]
-                fields_down=[]
-                loss_up_sim=[]
-                loss_up_smooth=[]
-                loss_down_sim=[]
-                loss_down_smooth=[]
-                loss=0
-                losses={'sim':None,'seg':None,'comp':None,'smooth':None}
-
-
-                for i in range(chunk[0],chunk[1]):
-                    #Computing flow fields and loss for each hop from chunk[0] to chunk[1]
-                    x1=X[:,:,i,...]
-                    x2=X[:,:,i+1,...]
-                    if not self.way=='down':
-                        moved_x1,field_up,preint_field=self.forward(x1,x2,registration=False)
-                        cur_loss=self.compute_loss(moved_x1,x2,field=preint_field)
-                        loss_up_sim.append(cur_loss['sim'])
-                        loss_up_smooth.append(cur_loss['smooth'])
-                        # field_down=self.registrator.integrate(-preint_field)
-                        # moved_x2=self.registrator.transformer(x2,field_down)
-                        # loss_up_sim.append(self.compute_loss(moved_x2,x1)['sim'])
-                        fields_up.append(field_up)
-                        # if len(fields_up)>0:
-                        #     field_up_2=self.compose_deformation(fields_up[-1],field_up)
-                        #     loss_up.append(self.compute_loss(self.apply_deform(X[:,:,i-1],field_up_2),x2))
-
-                    if not self.way=='up':
-                        moved_x2,field_down,preint_field=self.forward(x2,x1,registration=False)#
-                        fields_down.append(field_down)
-                        moved_x2=self.registrator.transformer(x2,field_down)
-                        cur_loss=self.compute_loss(moved_x2,x1,field=preint_field)
-                        loss_down_sim.append(cur_loss['sim'])
-                        loss_down_smooth.append(cur_loss['smooth'])
-                        # field_up=self.registrator.integrate(-preint_field)
-                        # moved_x1=self.registrator.transformer(x1,field_up)
-                        # loss_down_sim.append(self.compute_loss(moved_x1,x2)['sim'])
-                        
-                        # if len(fields_down)>0:
-                        #     field_down_2=self.compose_deformation(fields_down[-1],field_down)
-                        #     loss_down.append(self.compute_loss(self.apply_deform(X[:,:,i+1],field_down_2),x1))
-   
-
-
-                #Better with mean
-                if self.way=='up':
-                    loss=torch.stack(loss_up).mean()
-                elif self.way=='down':
-                    loss=torch.stack(loss_down).mean()
-                else:
-                    losses['sim']=torch.stack(loss_up_sim).mean()+torch.stack(loss_down_sim).mean()
-                    losses['smooth']=torch.stack(loss_up_smooth).mean()+torch.stack(loss_down_smooth).mean()
-                    # loss=(loss_up+loss_down)
-                
-                # Computing registration from the sequence of flow fields
+            for i in range(X.shape[2]-1):
+                #Computing flow fields and loss for each hop from chunk[0] to chunk[1]
+                x1=X[:,:,i,...]
+                x2=X[:,:,i+1,...]
                 if not self.way=='down':
-                    prop_x_up=X[:,:,chunk[0],...]
-                    prop_y_up=Y[:,:,chunk[0],...]
-                    composed_fields_up=self.compose_list(fields_up)
-
-                    if self.by_composition:
-                        prop_x_up=self.apply_deform(prop_x_up,composed_fields_up)
-                        prop_y_up=self.apply_deform(prop_y_up,composed_fields_up)
-                    else:
-                        for i,field_up in enumerate(fields_up):
-                            prop_x_up=self.apply_deform(prop_x_up,field_up)
-                            prop_y_up=self.apply_deform(prop_y_up,field_up)
-                            losses['contours']=self.compute_contour_loss(X[:,:,chunk[0]+i+1],prop_y_up)
-                    
-                    if self.losses['compo-reg-up']:
-                        losses['comp']=self.compute_loss(prop_x_up,X[:,:,chunk[1],...])['sim']
-                    if self.losses['compo-dice-up']:
-                        dice_loss=self.compute_loss(moved_mask=prop_y_up,target_mask=Y[:,:,chunk[1],...])['seg']
-                        losses['seg']=dice_loss
-                        dices_prop.append(dice_loss)
+                    opt.zero_grad()
+                    moved_x1,field_up,preint_field=self.forward(x1,x2,registration=False)
+                    cur_loss=self.compute_loss(moved_x1,x2,field=preint_field)
+                    loss=cur_loss['sim']+cur_loss['smooth']
+                
+                    field_down=self.registrator.integrate(-preint_field)
+                    moved_x2=self.registrator.transformer(x2,field_down)
+                    loss+=self.compute_loss(moved_x2,x1)['sim']
+                    self.manual_backward(loss)
+                    opt.step()
+                    losses+=loss
 
                 if not self.way=='up':
-                    prop_x_down=X[:,:,chunk[1],...]
-                    prop_y_down=Y[:,:,chunk[1],...]
-                    composed_fields_down=self.compose_list(fields_down[::-1])
+                    opt.zero_grad()
+                    moved_x2,field_down,preint_field=self.forward(x2,x1,registration=False)#
+                    cur_loss=self.compute_loss(moved_x2,x1,field=preint_field)
+                    loss=cur_loss['sim']+cur_loss['smooth']
+                    field_up=self.registrator.integrate(-preint_field)
+                    moved_x1=self.registrator.transformer(x1,field_up)
+                    loss+=self.compute_loss(moved_x1,x2)['sim']
+                    self.manual_backward(loss)
+                    opt.step()
+                    losses+=loss
 
-                    if self.by_composition:
-                        prop_x_down=self.apply_deform(prop_x_down,composed_fields_down)
-                        prop_y_down=self.apply_deform(prop_y_down,composed_fields_down)
-                    else:
-                        i=1
-                        for field_down in reversed(fields_down):
-                            prop_x_down=self.apply_deform(prop_x_down,field_down)
-                            prop_y_down=self.apply_deform(prop_y_down,field_down)
-                            losses['contours']+=self.compute_contour_loss(X[:,:,chunk[1]-i],prop_y_down)
-                            i+=1
-                    if self.losses['compo-reg-down']:
-                        losses['comp']+=self.compute_loss(prop_x_down,X[:,:,chunk[0],...])['sim']
-                    if self.losses['compo-dice-down']:
-                        dice_loss=self.compute_loss(moved_mask=prop_y_down,target_mask=Y[:,:,chunk[0],...])['seg']
-                        losses['seg']+=dice_loss
-                        dices_prop.append(dice_loss)
-
-
-
-            #Additionnal loss to ensure sequences (images and masks) generated from "positive" and "negative" flows are equal
-            # if self.way=='both':
-            #     #This helps
-            #     if self.losses['bidir-cons-dice']:
-            #         loss+=self.compute_loss(moved_mask=prop_y_down,target_mask=prop_y_up)
-            #     #This breaks stuff
-            #     if self.losses['bidir-cons-reg']:
-            #         loss+=self.compute_loss(prop_x_up,prop_x_down)
-                # loss+=nn.L1Loss()(self.apply_deform(X[:,:,chunk[0],...], self.compose_deformation(composed_fields_up,composed_fields_down)),X[:,:,chunk[0],...])
-                # loss+=nn.L1Loss()(self.apply_deform(X[:,:,chunk[1],...], self.compose_deformation(composed_fields_down,composed_fields_up)),X[:,:,chunk[1],...])
-                loss=losses['seg']+losses['sim']+losses['contours']#+losses['smooth']#torch.stack([v for v in losses.values()]).mean() 
-                # loss=self.loss_model(losses)
-                self.log_dict({'loss':loss},prog_bar=True)
-                self.manual_backward(loss)
-                y_opt.step()
-
-            # self.logger.experiment.add_image('x_true',X[0,:,chunk[0],...])
-            # self.logger.experiment.add_image('prop_x_down',prop_x_down[0,:,0,...])
-            # self.logger.experiment.add_image('x_true_f',X[0,:,chunk[1],...])
-            # self.logger.experiment.add_image('prop_x_up',prop_x_up[0,:,-1,...])
-        
-        if len(dices_prop)>0:
-            dices_prop=-torch.stack(dices_prop).mean()
-            self.log('val_accuracy',dices_prop)
-            print(dices_prop)
+            self.log_dict({'loss':losses},prog_bar=True)
+            self.log('val_accuracy',-losses)
+            return losses
         else:
-            self.log('val_accuracy',self.current_epoch)
-        return loss
+
+            X,Y=batch # X : Full scan (1x1xLxHxW) | Y : Ground truth (1xCxLxHxW)
+            opt=self.optimizers()
+            dices_prop=[]
+            Y_multi_lab=torch.clone(Y)
+            for lab in list(range(Y_multi_lab.shape[1]))[1:]:
+                chunks=[]
+                chunk=[]
+                #Binarize ground truth according to the label
+                Y=torch.stack([1-Y_multi_lab[:,lab],Y_multi_lab[:,lab]],dim=1)
+                #Identifying chunks (i->j)
+                for i in range(X.shape[2]):
+                    y=Y[:,:,i,...]
+                    if len(torch.unique(torch.argmax(y,1)))>1:
+                        chunk.append(i)
+                    if len(chunk)==2:
+                        chunks.append(chunk)
+                        chunk=[i]
+                if self.current_epoch==0:
+                    print(lab,chunks)
+                
+                for chunk in chunks:
+                    opt.zero_grad()
+                    #Sequences of flow fields (field_up=forward, field_down=backward)
+                    fields_up=[]
+                    fields_down=[]
+                    loss_up_sim=[]
+                    loss_up_smooth=[]
+                    loss_down_sim=[]
+                    loss_down_smooth=[]
+                    loss=0
+                    losses={'sim':None,'seg':None,'comp':None,'smooth':None}
+
+
+                    for i in range(chunk[0],chunk[1]):
+                        #Computing flow fields and loss for each hop from chunk[0] to chunk[1]
+                        x1=X[:,:,i,...]
+                        x2=X[:,:,i+1,...]
+                        if not self.way=='down':
+                            moved_x1,field_up,preint_field=self.forward(x1,x2,registration=False)
+                            cur_loss=self.compute_loss(moved_x1,x2,field=preint_field)
+                            loss_up_sim.append(cur_loss['sim'])
+                            loss_up_smooth.append(cur_loss['smooth'])
+                            fields_up.append(field_up)
+
+                            field_down=self.registrator.integrate(-preint_field)
+                            moved_x2=self.registrator.transformer(x2,field_down)
+                            loss_up_sim.append(self.compute_loss(moved_x2,x1)['sim'])
+                            # if len(fields_up)>0:
+                            #     field_up_2=self.compose_deformation(fields_up[-1],field_up)
+                            #     loss_up.append(self.compute_loss(self.apply_deform(X[:,:,i-1],field_up_2),x2))
+
+                        if not self.way=='up':
+                            moved_x2,field_down,preint_field=self.forward(x2,x1,registration=False)#
+                            fields_down.append(field_down)
+                            moved_x2=self.registrator.transformer(x2,field_down)
+                            cur_loss=self.compute_loss(moved_x2,x1,field=preint_field)
+                            loss_down_sim.append(cur_loss['sim'])
+                            loss_down_smooth.append(cur_loss['smooth'])
+                            field_up=self.registrator.integrate(-preint_field)
+                            moved_x1=self.registrator.transformer(x1,field_up)
+                            loss_down_sim.append(self.compute_loss(moved_x1,x2)['sim'])
+                            
+                            # if len(fields_down)>0:
+                            #     field_down_2=self.compose_deformation(fields_down[-1],field_down)
+                            #     loss_down.append(self.compute_loss(self.apply_deform(X[:,:,i+1],field_down_2),x1))
+    
+
+
+                    #Better with mean
+                    if self.way=='up':
+                        loss=torch.stack(loss_up).mean()
+                    elif self.way=='down':
+                        loss=torch.stack(loss_down).mean()
+                    else:
+                        losses['sim']=torch.stack(loss_up_sim).mean()+torch.stack(loss_down_sim).mean()
+                        losses['smooth']=torch.stack(loss_up_smooth).mean()+torch.stack(loss_down_smooth).mean()
+                        # loss=(loss_up+loss_down)
+                    
+                    # Computing registration from the sequence of flow fields
+                    if not self.way=='down':
+                        prop_x_up=X[:,:,chunk[0],...]
+                        prop_y_up=Y[:,:,chunk[0],...]
+                        composed_fields_up=self.compose_list(fields_up)
+                        moved_y1,mask_fields_up=self.forward(prop_y_up[:,1:],Y[:,1:,chunk[1],...],registration=True)
+                        losses['mask_prop']=self.compute_loss(moved_mask=moved_y1,target_mask=Y[:,1:,chunk[1],...])['seg']+nn.L1Loss()(composed_fields_up*prop_y_up,mask_fields_up*prop_y_up)
+                        #losses['bending']=BendingEnergyLoss()(composed_fields_up)
+
+                        if self.by_composition:
+                            prop_x_up=self.apply_deform(prop_x_up,composed_fields_up)
+                            prop_y_up=self.apply_deform(prop_y_up,composed_fields_up)
+                        else:
+                            for i,field_up in enumerate(fields_up):
+                                prop_x_up=self.apply_deform(prop_x_up,field_up)
+                                prop_y_up=self.apply_deform(prop_y_up,field_up)
+                                # losses['contours']=self.compute_contour_loss(X[:,:,chunk[0]+i+1],prop_y_up)
+                        
+                        if self.losses['compo-reg-up']:
+                            losses['comp']=self.compute_loss(prop_x_up,X[:,:,chunk[1],...])['sim']
+                        if self.losses['compo-dice-up']:
+                            dice_loss=self.compute_loss(moved_mask=prop_y_up,target_mask=Y[:,:,chunk[1],...])['seg']
+                            losses['seg']=dice_loss
+                            dices_prop.append(dice_loss)
+
+                    if not self.way=='up':
+                        prop_x_down=X[:,:,chunk[1],...]
+                        prop_y_down=Y[:,:,chunk[1],...]
+                        composed_fields_down=self.compose_list(fields_down[::-1])
+                        moved_y2,mask_fields_down=self.forward(prop_y_down[:,1:],Y[:,1:,chunk[0],...],registration=True)
+                        losses['mask_prop']+=self.compute_loss(moved_mask=moved_y2,target_mask=Y[:,1:,chunk[0],...])['seg']+nn.L1Loss()(composed_fields_down*prop_y_down,mask_fields_down*prop_y_down)
+                        #losses['bending']+=BendingEnergyLoss()(composed_fields_down)
+                        if self.by_composition:
+                            prop_x_down=self.apply_deform(prop_x_down,composed_fields_down)
+                            prop_y_down=self.apply_deform(prop_y_down,composed_fields_down)
+                        else:
+                            i=1
+                            for field_down in reversed(fields_down):
+                                prop_x_down=self.apply_deform(prop_x_down,field_down)
+                                prop_y_down=self.apply_deform(prop_y_down,field_down)
+                                # losses['contours']+=self.compute_contour_loss(X[:,:,chunk[1]-i],prop_y_down)
+                                i+=1
+                        if self.losses['compo-reg-down']:
+                            losses['comp']+=self.compute_loss(prop_x_down,X[:,:,chunk[0],...])['sim']
+                        if self.losses['compo-dice-down']:
+                            dice_loss=self.compute_loss(moved_mask=prop_y_down,target_mask=Y[:,:,chunk[0],...])['seg']
+                            losses['seg']+=dice_loss
+                            dices_prop.append(dice_loss)
+
+
+
+                #Additionnal loss to ensure sequences (images and masks) generated from "positive" and "negative" flows are equal
+                # if self.way=='both':
+                #     #This helps
+                #     if self.losses['bidir-cons-dice']:
+                #         loss+=self.compute_loss(moved_mask=prop_y_down,target_mask=prop_y_up)
+                #     #This breaks stuff
+                #     if self.losses['bidir-cons-reg']:
+                #         loss+=self.compute_loss(prop_x_up,prop_x_down)
+                    # loss+=nn.L1Loss()(self.apply_deform(X[:,:,chunk[0],...], self.compose_deformation(composed_fields_up,composed_fields_down)),X[:,:,chunk[0],...])
+                    # loss+=nn.L1Loss()(self.apply_deform(X[:,:,chunk[1],...], self.compose_deformation(composed_fields_down,composed_fields_up)),X[:,:,chunk[1],...])
+                    loss=losses['seg']+losses['sim']+losses['comp']+losses['smooth']+losses['mask_prop']#+losses['bending']#+losses['contours']##torch.stack([v for v in losses.values()]).mean() 
+                    
+                    # loss=self.loss_model(losses)
+                    self.log_dict({'loss':loss},prog_bar=True)
+                    self.manual_backward(loss)
+                    opt.step()
+
+                # self.logger.experiment.add_image('x_true',X[0,:,chunk[0],...])
+                # self.logger.experiment.add_image('prop_x_down',prop_x_down[0,:,0,...])
+                # self.logger.experiment.add_image('x_true_f',X[0,:,chunk[1],...])
+                # self.logger.experiment.add_image('prop_x_up',prop_x_up[0,:,-1,...])
+            
+            if len(dices_prop)>0:
+                dices_prop=-torch.stack(dices_prop).mean()
+                self.log('val_accuracy',-loss)
+                print(dices_prop)
+            else:
+                self.log('val_accuracy',self.current_epoch)
+            return loss
+
+    
+    def validation_step(self,batch,batch_idx):
+        X,Y_dense=batch
+        Y=Y_dense.clone()
+        for i in range(Y.shape[2]):
+            for lab in range(1,Y.shape[1]):
+                if i not in self.selected_slices[lab]:
+                    Y[:,lab,i,...]*=0
+        Y_up,Y_down,Y_fused=propagate_by_composition(X[0],Y[0],self)
+
+        metrics={}
+        for lab in range(1,Y.shape[1]):
+            metrics[lab]={'dice':[],'haus':[],'asd':[]}
+            for i in range(Y.shape[2]):
+                if i in self.selected_slices[lab] and i in range(self.selected_slices[lab][0],self.selected_slices[lab][-1]):
+                    dice,haus,asd=compute_metrics(Y_up[lab,i],Y_dense[0,lab,i])
+                    metrics[lab]['dice'].append(dice)
+                    metrics[lab]['haus'].append(haus)
+                    metrics[lab]['asd'].append(asd)
+            metrics[lab]['mean_dice']=torch.stack(metrics[lab]['dice']).mean()
+            metrics[lab]['mean_haus']=torch.stack(metrics[lab]['haus']).mean()
+            metrics[lab]['mean_asd']=torch.stack(metrics[lab]['asd']).mean()
+        metrics['all']={'mean_dice':torch.stack([v['mean_dice'] for v in metrics.values()]).mean(),'mean_haus':torch.stack([v['mean_haus'] for v in metrics.values()]).mean(),'mean_asd':torch.stack([v['mean_asd'] for v in metrics.values()]).mean()}
+
+        self.train()
+        print(metrics.keys(),[v['mean_dice'] for v in metrics.values()])
+        return metrics
+        
 
     def register_images(self,moving,target,moving_mask):
         moved,field=self.forward(moving,target,registration=True)
@@ -334,14 +414,17 @@ class MTL_loss(torch.nn.Module):
         self.lw = dic
         for k in dic.keys():
             if dic[k] > 0:
-                self.sigmas[k] = nn.Parameter(torch.ones(1) * dic[k])
+                self.sigmas[k] = nn.Parameter(torch.ones(1)/len(dic.keys()))
 
     def forward(self, loss_dict):
         loss = 0
         with torch.set_grad_enabled(True):
             for k in loss_dict.keys():
                 if k in self.lw.keys():
-                    loss +=0.5 * loss_dict[k] / (self.sigmas[k])**2 + torch.log(self.sigmas[k])
+                    print(k,torch.exp(self.sigmas[k])/torch.stack([torch.exp(v) for v in self.sigmas.values()]).sum())
+                    loss += loss_dict[k]*torch.exp(self.sigmas[k])/torch.stack([torch.exp(v) for v in self.sigmas.values()]).sum()
+                    # loss +=0.5 * loss_dict[k] / (self.sigmas[k])**2 + torch.log(self.sigmas[k])
+
                     
   
                   
