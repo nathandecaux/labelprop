@@ -12,8 +12,18 @@ from .voxelmorph2d import NCC,SpatialTransformer
 import plotext as plt
 from monai.losses import GlobalMutualInformationLoss
 from kornia.losses import HausdorffERLoss,SSIMLoss,MS_SSIMLoss
+import json 
 
-
+class NumpyEncoder(json.JSONEncoder):
+    """ Special json encoder for numpy types """
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
 
 class SuperST(torch.nn.Module):
     """Inherit from SpatialTransformer"""
@@ -304,7 +314,7 @@ def compute_metrics(y_pred,y):
     if len(torch.unique(y_pred))>1:
         dice=monai.metrics.compute_meandice(y_pred, y, include_background=True)
     else:
-        dices=torch.from_numpy(np.array([0.]))
+        dice=torch.from_numpy(np.array([0.]))
             
     if len(torch.unique(torch.argmax(y_pred,1)))>1:
         hauss=med.hd(torch.argmax(y_pred,1).cpu().numpy()>0,torch.argmax(y,1).cpu().numpy()>0)

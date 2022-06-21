@@ -8,6 +8,10 @@ from monai.losses import BendingEnergyLoss,GlobalMutualInformationLoss,DiceLoss,
 from kornia.filters import sobel, gaussian_blur2d,canny,spatial_gradient
 from kornia.losses import HausdorffERLoss,SSIMLoss ,MS_SSIMLoss
 from .utils import *
+from copy import deepcopy
+from datetime import datetime
+import os
+import json
 class LabelProp(pl.LightningModule):
 
     @property
@@ -38,6 +42,9 @@ class LabelProp(pl.LightningModule):
         # self.loss_model = MTL_loss(['sim','seg','comp','smooth'])
         self.losses=losses
         if self.by_composition: print('Using composition for training')
+        #Get datetime for saving
+        time=datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.val_by_epoch=time+'_val_by_epoch.json'
         print('Losses',losses)
         self.save_hyperparameters()
 
@@ -363,6 +370,14 @@ class LabelProp(pl.LightningModule):
     def validation_step(self,batch,batch_idx):
         X,Y_dense=batch
         Y=Y_dense.clone()
+        #Check if file self.val_by_epoch (json file) exists, otherwise create it
+        if not os.path.exists(self.val_by_epoch):
+            with open(self.val_by_epoch,'w') as f:
+                json.dump({},f,cls=NumpyEncoder)
+        #Load the file
+        with open(self.val_by_epoch,'r') as f:
+            val_by_epoch=json.load(f)
+
         for i in range(Y.shape[2]):
             for lab in range(1,Y.shape[1]):
                 if i not in self.selected_slices[lab]:
@@ -371,20 +386,24 @@ class LabelProp(pl.LightningModule):
 
         metrics={}
         for lab in range(1,Y.shape[1]):
-            metrics[lab]={'dice':[],'haus':[],'asd':[]}
+            metrics[lab]={'dice':{'up':[],'down':[],'fused':[]},'haus':{'up':[],'down':[],'fused':[]},'asd':{'up':[],'down':[],'fused':[]}}
             for i in range(Y.shape[2]):
-                if i in self.selected_slices[lab] and i in range(self.selected_slices[lab][0],self.selected_slices[lab][-1]):
-                    dice,haus,asd=compute_metrics(Y_up[lab,i],Y_dense[0,lab,i])
-                    metrics[lab]['dice'].append(dice)
-                    metrics[lab]['haus'].append(haus)
-                    metrics[lab]['asd'].append(asd)
-            metrics[lab]['mean_dice']=torch.stack(metrics[lab]['dice']).mean()
-            metrics[lab]['mean_haus']=torch.stack(metrics[lab]['haus']).mean()
-            metrics[lab]['mean_asd']=torch.stack(metrics[lab]['asd']).mean()
-        metrics['all']={'mean_dice':torch.stack([v['mean_dice'] for v in metrics.values()]).mean(),'mean_haus':torch.stack([v['mean_haus'] for v in metrics.values()]).mean(),'mean_asd':torch.stack([v['mean_asd'] for v in metrics.values()]).mean()}
+                if i not in self.selected_slices[lab] and Y_dense[0,lab,i].sum()>0:
+                    for k,v in zip(['up','down','fused'],[Y_up,Y_down,Y_fused]):
+                        dice,haus,asd=compute_metrics(v[lab,i],Y_dense[0,lab,i])
+                        metrics[lab]['dice'][k].append(dice.cpu().numpy())
+                        metrics[lab]['haus'][k].append(haus.cpu().numpy())
+                        metrics[lab]['asd'][k].append(asd.cpu().numpy())
+            # for k in ['up','down','fused']:
+            #     metrics[lab]['mean_dice_'+k]=np.stack(metrics[lab]['dice']).mean()
+            #     metrics[lab]['mean_haus_'+k]=np.stack(metrics[lab]['haus']).mean()
+            #     metrics[lab]['mean_asd_'+k]=np.stack(metrics[lab]['asd']).mean()
 
         self.train()
-        print(metrics.keys(),[v['mean_dice'] for v in metrics.values()])
+        val_by_epoch[self.current_epoch]=deepcopy(metrics)
+        with open(self.val_by_epoch,'w') as f:
+            json.dump(val_by_epoch,f,cls=NumpyEncoder)
+        
         return metrics
         
 

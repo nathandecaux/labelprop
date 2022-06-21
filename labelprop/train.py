@@ -69,7 +69,7 @@ def train(datamodule,model_PARAMS,max_epochs,ckpt=None,pretraining=False):
         model=model.load_from_checkpoint(ckpt,strict=False)
     trainer=Trainer(gpus=1,max_epochs=max_epochs,callbacks=checkpoint_callback)
     trainer.fit(model,datamodule)
-    model=model.load_from_checkpoint(checkpoint_callback.best_model_path)
+    #model=model.load_from_checkpoint(checkpoint_callback.best_model_path)
     best_ckpt=checkpoint_callback.best_model_path
     return model,best_ckpt
 
