@@ -130,7 +130,7 @@ def fuse_up_and_down(Y_up,Y_down,weights):
             # Y[0,i][Y[lab,i]>0.5]+=1-Y[lab,i][Y[lab,i]>0.5]#
             # Y[0,i]+=torch.nn.Sigmoid()(Y[lab:lab+1,i])[0]
     
-    Y[0]=1-torch.sum(Y[1:],0)
+    Y[0]=1-torch.mean(Y[1:],0)
     # Y[0]=Y[0]/(Y.shape[0]-1)
     # Y[0][(torch.sum(Y_up[1:],0)==0)*1.]
     return Y
@@ -230,8 +230,8 @@ def propagate_by_composition(X,Y,model,fields=None):
     # weights=weights.mean(dim=-1).mean(dim=-1)
     # raise Exception('weights',weights)
     # weights=torch.nn.Softmax(2)(weights)
-    Y_up[0]=1-torch.sum(Y_up[1:],0)
-    Y_down[0]=1-torch.sum(Y_down[1:],0)
+    Y_up[0]=1-torch.mean(Y_up[1:],0)
+    Y_down[0]=1-torch.mean(Y_down[1:],0)
     Y_fused=fuse_up_and_down(Y_up,Y_down,weights)
     return Y_up,Y_down,Y_fused
 

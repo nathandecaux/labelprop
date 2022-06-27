@@ -134,9 +134,9 @@ class LabelProp(pl.LightningModule):
             # loss_ncc=0.05*self.mssim(moved,target)
             losses['sim']=loss_ncc
         if moved_mask!=None:
-            # loss_seg= Dice().loss(moved_mask,target_mask)
+            loss_seg= Dice().loss(moved_mask,target_mask)
 
-            loss_seg=DiceLoss(include_background=False,softmax=False)(moved_mask,target_mask)-1
+            # loss_seg=DiceLoss(include_background=False,softmax=False)(moved_mask,target_mask)-1
             losses['seg']=loss_seg
             # losses['seg']-=0.005*HausdorffERLoss()(moved_mask[:,1:],target_mask[:,1:].long())
         if field!=None:
@@ -315,7 +315,7 @@ class LabelProp(pl.LightningModule):
                         prop_y_down=Y[:,:,chunk[1],...]
                         composed_fields_down=self.compose_list(fields_down[::-1])
                         moved_y2,mask_fields_down=self.forward(prop_y_down[:,1:],Y[:,1:,chunk[0],...],registration=True)
-                        losses['mask_prop']+=self.compute_loss(moved_mask=moved_y2,target_mask=Y[:,1:,chunk[0],...])['seg']+nn.L1Loss()(composed_fields_down*prop_y_down,mask_fields_down*prop_y_down)
+                        # losses['mask_prop']+=self.compute_loss(moved_mask=moved_y2,target_mask=Y[:,1:,chunk[0],...])['seg']+nn.L1Loss()(composed_fields_down*prop_y_down,mask_fields_down*prop_y_down)
                         #losses['bending']+=BendingEnergyLoss()(composed_fields_down)
                         if self.by_composition:
                             prop_x_down=self.apply_deform(prop_x_down,composed_fields_down)
@@ -346,7 +346,7 @@ class LabelProp(pl.LightningModule):
                 #         loss+=self.compute_loss(prop_x_up,prop_x_down)
                     # loss+=nn.L1Loss()(self.apply_deform(X[:,:,chunk[0],...], self.compose_deformation(composed_fields_up,composed_fields_down)),X[:,:,chunk[0],...])
                     # loss+=nn.L1Loss()(self.apply_deform(X[:,:,chunk[1],...], self.compose_deformation(composed_fields_down,composed_fields_up)),X[:,:,chunk[1],...])
-                    loss=losses['seg']+losses['sim']+losses['comp']+losses['smooth']+losses['mask_prop']#+losses['bending']#+losses['contours']##torch.stack([v for v in losses.values()]).mean() 
+                    loss=losses['seg']+losses['sim']+losses['comp']+losses['smooth']#+losses['mask_prop']#+losses['bending']#+losses['contours']##torch.stack([v for v in losses.values()]).mean() 
                     
                     # loss=self.loss_model(losses)
                     self.log_dict({'loss':loss},prog_bar=True)
@@ -360,7 +360,7 @@ class LabelProp(pl.LightningModule):
             
             if len(dices_prop)>0:
                 dices_prop=-torch.stack(dices_prop).mean()
-                self.log('val_accuracy',-loss)
+                self.log('val_accuracy',dices_prop)
                 print(dices_prop)
             else:
                 self.log('val_accuracy',self.current_epoch)

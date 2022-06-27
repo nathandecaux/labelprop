@@ -119,19 +119,23 @@ class LabelPropDataModule(pl.LightningDataModule):
         else:
             img=self.img_path
             mask=self.mask_path
+        self.val_dataset=None
         self.train_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=self.selected_slices,z_axis=self.z_axis)
         if self.selected_slices!=None:
             self.val_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=None,z_axis=self.z_axis)
         self.test_dataset=self.train_dataset
 
     def train_dataloader(self,batch_size=1):
-        return DataLoader(self.train_dataset, 1, num_workers=2,pin_memory=False)
+        return DataLoader(self.train_dataset, 1, num_workers=16,pin_memory=True)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, 1, num_workers=2,pin_memory=False)
+        if self.val_dataset is None:
+            return None
+        else:
+            return DataLoader(self.val_dataset, 1, num_workers=16,pin_memory=True)
     
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, 1, num_workers=2, pin_memory=False)
+        return DataLoader(self.test_dataset, 1, num_workers=16, pin_memory=True)
 
 class PreTrainingDataModule(pl.LightningDataModule):
     def __init__(self, img_list,shape=(288,288),z_axis=0):
@@ -151,4 +155,4 @@ class PreTrainingDataModule(pl.LightningDataModule):
         self.train_dataset=ConcatDataset(training_scans)
 
     def train_dataloader(self,batch_size=None):
-        return DataLoader(self.train_dataset, 1, num_workers=8,pin_memory=False,shuffle=False)
+        return DataLoader(self.train_dataset, 1, num_workers=8,pin_memory=True,shuffle=False)
