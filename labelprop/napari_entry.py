@@ -105,13 +105,16 @@ def pretrain(img_list,shape,z_axis=2,output_dir='~/label_prop_checkpoints',name=
         torch.save(fields_up,join(output_dir,f'{name}_up.pt'))
         torch.save(fields_down,join(output_dir,f'{name}_down.pt'))
 
-def propagate_from_fields(img,mask,fields_up,fields_down,shape,z_axis=2,output_dir='',name=''):
-    true_shape=img.shape
+def propagate_from_fields(img,mask,fields_up,fields_down,shape,z_axis=2,selected_slices=None,kwargs={}):
+    if isinstance(img,str):
+        true_shape=np.load(img).get_fdata().shape
+    else:
+        true_shape=img.shape
     shape=(shape,shape)
-    dm=LabelPropDataModule(img_path=img,mask_path=mask,lab='all',shape=shape,selected_slices=None,z_axis=z_axis)
+    dm=LabelPropDataModule(img_path=img,mask_path=mask,lab='all',shape=shape,selected_slices=selected_slices,z_axis=z_axis)
     st=SuperST(size=shape)
     X,Y=dm.train_dataloader().dataset[0]
-    Y_up,Y_down,Y_fused=propagate_by_composition(X, Y, st,(fields_up,fields_down))
+    Y_up,Y_down,Y_fused=propagate_by_composition(X, Y, st,(fields_up,fields_down),**kwargs)
     
     if z_axis!=0:
         Y_up=torch.moveaxis(Y_up,0,z_axis)
@@ -122,10 +125,11 @@ def propagate_from_fields(img,mask,fields_up,fields_down,shape,z_axis=2,output_d
     Y_fused=resample(Y_fused,true_shape)
     return Y_up.cpu().detach().numpy(),Y_down.cpu().detach().numpy(),Y_fused.cpu().detach().numpy()
 
-def get_fields(img,ckpt,mask=None,z_axis=2):
+def get_fields(img,ckpt,mask=None,z_axis=2,selected_slices=None):
     shape=torch.load(ckpt)['hyper_parameters']['shape']
     if mask==None: mask=img
-    dm=LabelPropDataModule(img_path=img,mask_path=img,lab='all',shape=shape,selected_slices=None,z_axis=z_axis)
+    dm=LabelPropDataModule(img_path=img,mask_path=mask,lab='all',shape=shape,selected_slices=selected_slices,z_axis=z_axis)
+    dm.setup()
     st=SuperST(size=shape)
     X,Y=dm.train_dataloader().dataset[0]
     model=LabelProp(shape=shape).load_from_checkpoint(ckpt,device='cuda')
