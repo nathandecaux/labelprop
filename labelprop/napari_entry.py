@@ -2,6 +2,7 @@
 from .train import inference,train
 from.utils import get_successive_fields,propagate_by_composition,SuperST
 from .DataLoading import LabelPropDataModule,PreTrainingDataModule
+from .lightning_model import LabelProp
 import numpy as np
 import torch
 from torch.nn import functional as func
@@ -120,5 +121,15 @@ def propagate_from_fields(img,mask,fields_up,fields_down,shape,z_axis=2,output_d
     Y_down=resample(Y_down,true_shape)
     Y_fused=resample(Y_fused,true_shape)
     return Y_up.cpu().detach().numpy(),Y_down.cpu().detach().numpy(),Y_fused.cpu().detach().numpy()
+
+def get_fields(img,ckpt,mask=None,z_axis=2):
+    shape=torch.load(ckpt)['hyper_parameters']['shape']
+    if mask==None: mask=img
+    dm=LabelPropDataModule(img_path=img,mask_path=img,lab='all',shape=shape,selected_slices=None,z_axis=z_axis)
+    st=SuperST(size=shape)
+    X,Y=dm.train_dataloader().dataset[0]
+    model=LabelProp(shape=shape).load_from_checkpoint(ckpt,device='cuda')
+    fields_up,fields_down=get_successive_fields(X, model.to('cuda'))
+    return fields_up,fields_down,X,Y
 
 
