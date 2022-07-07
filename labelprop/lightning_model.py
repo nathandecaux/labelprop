@@ -390,7 +390,7 @@ class LabelProp(pl.LightningModule):
             for i in range(Y.shape[2]):
                 if i not in self.selected_slices[lab] and Y_dense[0,lab,i].sum()>0:
                     for k,v in zip(['up','down','fused'],[Y_up,Y_down,Y_fused]):
-                        dice,haus,asd=compute_metrics(v[lab,i],Y_dense[0,lab,i])
+                        dice,haus,asd=compute_metrics(v[lab,i].to(self.device),Y_dense[0,lab,i])
                         metrics[lab]['dice'][k].append(dice.cpu().numpy())
                         metrics[lab]['haus'][k].append(haus.cpu().numpy())
                         metrics[lab]['asd'][k].append(asd.cpu().numpy())

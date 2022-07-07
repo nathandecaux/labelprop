@@ -19,7 +19,7 @@ def resample(Y,size):
     return torch.argmax(Y,0)
 
 
-def propagate_from_ckpt(img,mask,checkpoint,shape=304,z_axis=2,label='all'):
+def propagate_from_ckpt(img,mask,checkpoint,shape=304,z_axis=2,label='all',**kwargs):
     if str(label)=='0': label='all'
     true_shape=img.shape
     by_composition=True
@@ -33,7 +33,7 @@ def propagate_from_ckpt(img,mask,checkpoint,shape=304,z_axis=2,label='all'):
     dm=LabelPropDataModule(img_path=img,mask_path=mask,lab=label,shape=shape,selected_slices=None,z_axis=z_axis)
 
     #Inference
-    Y_up,Y_down,Y_fused=inference(datamodule=dm,model_PARAMS=model_PARAMS,ckpt=ckpt)
+    Y_up,Y_down,Y_fused=inference(datamodule=dm,model_PARAMS=model_PARAMS,ckpt=ckpt,**kwargs)
     if z_axis!=0:
         Y_up=torch.moveaxis(Y_up,0,z_axis)
         Y_down=torch.moveaxis(Y_down,0,z_axis)
@@ -107,23 +107,31 @@ def pretrain(img_list,shape,z_axis=2,output_dir='~/label_prop_checkpoints',name=
 
 def propagate_from_fields(img,mask,fields_up,fields_down,shape,z_axis=2,selected_slices=None,kwargs={}):
     if isinstance(img,str):
-        true_shape=np.load(img).get_fdata().shape
+        true_shape=ni.load(img).get_fdata().shape
     else:
         true_shape=img.shape
     shape=(shape,shape)
     dm=LabelPropDataModule(img_path=img,mask_path=mask,lab='all',shape=shape,selected_slices=selected_slices,z_axis=z_axis)
+    dm.setup()
     st=SuperST(size=shape)
     X,Y=dm.train_dataloader().dataset[0]
-    Y_up,Y_down,Y_fused=propagate_by_composition(X, Y, st,(fields_up,fields_down),**kwargs)
     
+    if kwargs['return_weights']==True:
+        Y_up,Y_down,Y_fused,weights=propagate_by_composition(X, Y, st,(fields_up,fields_down),**kwargs)
+    else:
+        Y_up,Y_down,Y_fused=propagate_by_composition(X, Y, st,(fields_up,fields_down),**kwargs)
     if z_axis!=0:
-        Y_up=torch.moveaxis(Y_up,0,z_axis)
-        Y_down=torch.moveaxis(Y_down,0,z_axis)
-        Y_fused=torch.moveaxis(Y_fused,0,z_axis)
+        Y_up=torch.moveaxis(torch.argmax(Y_up,0),0,z_axis)
+        Y_down=torch.moveaxis(torch.argmax(Y_down,0),0,z_axis)
+        Y_fused=torch.moveaxis(torch.argmax(Y_fused,0),0,z_axis)
+    print(Y_up.shape)
     Y_up=resample(Y_up,true_shape)
     Y_down=resample(Y_down,true_shape)
     Y_fused=resample(Y_fused,true_shape)
-    return Y_up.cpu().detach().numpy(),Y_down.cpu().detach().numpy(),Y_fused.cpu().detach().numpy()
+    if kwargs['return_weights']==False:
+        return Y_up.cpu().detach().numpy(),Y_down.cpu().detach().numpy(),Y_fused.cpu().detach().numpy()
+    else:
+        return Y_up.cpu().detach().numpy(),Y_down.cpu().detach().numpy(),Y_fused.cpu().detach().numpy(),weights.cpu().detach().numpy()
 
 def get_fields(img,ckpt,mask=None,z_axis=2,selected_slices=None):
     shape=torch.load(ckpt)['hyper_parameters']['shape']

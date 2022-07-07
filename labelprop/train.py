@@ -73,12 +73,12 @@ def train(datamodule,model_PARAMS,max_epochs,ckpt=None,pretraining=False):
     best_ckpt=checkpoint_callback.best_model_path
     return model,best_ckpt
 
-def inference(datamodule,model_PARAMS,ckpt):
+def inference(datamodule,model_PARAMS,ckpt,**kwargs):
     model=LabelProp(**model_PARAMS)
     model=model.load_from_checkpoint(ckpt,strict=False)
     datamodule.setup('fit')
     X,Y=datamodule.train_dataloader().dataset[0]
     # weights=get_weights(Y)
-    Y_up,Y_down,Y_fused=propagate_by_composition(X,Y,model)
+    Y_up,Y_down,Y_fused=propagate_by_composition(X,Y,model,**kwargs)
     # Y_fused=fuse_up_and_down(Y_up,Y_down,weights)
     return torch.argmax(Y_up,0),torch.argmax(Y_down,0),torch.argmax(Y_fused,0)

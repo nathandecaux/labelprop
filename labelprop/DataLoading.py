@@ -25,7 +25,8 @@ class FullScan(data.Dataset):
         self.X,self.Y=self.resample(self.X,self.Y,(self.Y.shape[2],shape[0],shape[1]))
 
         if selected_slices!=None:
-            if selected_slices=='bench':
+            if 'bench' in selected_slices:
+                n_slices=selected_slices.split('_')[1]
                 #Create annotated dict with label number as key and list of slices as value
                 annotated={}
                 for lab in range(1,self.Y.shape[1]): annotated[lab]=[]
@@ -35,8 +36,23 @@ class FullScan(data.Dataset):
                             annotated[lab].append(i)
                 selected_slices={}
                 for lab in range(1,self.Y.shape[1]):
-                    median=int(len(annotated[lab])/2)
-                    selected_slices[lab]=[annotated[lab][0],annotated[lab][median],annotated[lab][-1]]
+                    n=int(n_slices)-1
+                    chunk_range=annotated[lab][-1]-annotated[lab][0]
+                    # selected_slices[lab]=[annotated[lab][int((len(annotated[lab])-1)*(x/n))] for x in range(n+1)]
+                    preselected=[annotated[lab][0]+int(chunk_range*(x/n)) for x in range(n+1)]
+                    #Get values of annotated[lab] that are the closest to the preselected values
+                    print(preselected)
+                    if n_slices=='3':
+                        median=int(len(annotated[lab])/2)
+                        selected_slices[lab]=[annotated[lab][0],annotated[lab][median],annotated[lab][-1]]
+                    else:
+                        selected_slices[lab]=[min(annotated[lab], key=lambda x:abs(x-myNumber)) for myNumber in preselected]
+                    # if n_slices=='3':
+                    #     selected_slices[lab]=[annotated[lab][0],annotated[lab][median],annotated[lab][-1]]
+                    # if n_slices=='5':
+                        
+                    # elif n_slices=='7':
+                    #     additionnal_idx=
                     for i in range(self.Y.shape[2]):
                         if i not in selected_slices[lab]:
                             self.Y[:,lab,i]=self.Y[:,lab,i]*0
@@ -121,8 +137,8 @@ class LabelPropDataModule(pl.LightningDataModule):
             mask=self.mask_path
         self.val_dataset=None
         self.train_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=self.selected_slices,z_axis=self.z_axis)
-        if self.selected_slices!=None:
-            self.val_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=None,z_axis=self.z_axis)
+        # if self.selected_slices!=None:
+        #     self.val_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=None,z_axis=self.z_axis)
         self.test_dataset=self.train_dataset
 
     def train_dataloader(self,batch_size=1):

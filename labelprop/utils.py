@@ -10,7 +10,7 @@ import medpy.metric as med
 from .voxelmorph2d import NCC,SpatialTransformer
 # from .weight_optimizer import optimize_weights
 import plotext as plt
-from monai.losses import GlobalMutualInformationLoss
+from monai.losses import GlobalMutualInformationLoss,LocalNormalizedCrossCorrelationLoss
 from kornia.losses import HausdorffERLoss,SSIMLoss,MS_SSIMLoss
 import json 
 
@@ -130,20 +130,21 @@ def fuse_up_and_down(Y_up,Y_down,weights):
             # Y[0,i][Y[lab,i]>0.5]+=1-Y[lab,i][Y[lab,i]>0.5]#
             # Y[0,i]+=torch.nn.Sigmoid()(Y[lab:lab+1,i])[0]
     
-    Y[0]=1-torch.mean(Y[1:],0)
+    Y[0]=1-torch.max(Y[1:],0)[0]
     # Y[0]=Y[0]/(Y.shape[0]-1)
     # Y[0][(torch.sum(Y_up[1:],0)==0)*1.]
     return Y
 
 def get_successive_fields(X,model):
     X=X[0]
+    device=X.device
     fields_up=[]
     fields_down=[]
     for i in range(X.shape[0]-1):
         x1=X[i]
         x2=X[i+1]
-        fields_up.append(model(to_batch(x1,'cuda'),to_batch(x2,'cuda'))[1])
-        fields_down.append(model(to_batch(x2,'cuda'),to_batch(x1,'cuda'))[1])
+        fields_up.append(model(to_batch(x1,device),to_batch(x2,device))[1])
+        fields_down.append(model(to_batch(x2,device),to_batch(x1,device))[1])
     return fields_up,fields_down
 
 def propagate_labels(X,Y,model,model_down=None):
@@ -181,17 +182,29 @@ def propagate_labels(X,Y,model,model_down=None):
     print('counts',count_up,count_down)
     return Y,Y2
 
-def propagate_by_composition(X,Y,model,fields=None,criteria='distance',reduce='mean',func=None):
-    Y_up=torch.clone(Y)
-    Y_down=torch.clone(Y)
-    n_classes=Y_up.shape[0]
-    model.eval().to('cuda')
+class Normalize(torch.nn.Module):
+    def __init__(self, dim=2):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, x):
+        return x / torch.sum(x, dim=self.dim, keepdim=True)
+
+def propagate_by_composition(X,Y,model,fields=None,criteria='distance',reduction='mean',func=Normalize(2),device='cuda',return_weights=False):
+    X=X.to(device)
+    Y=Y.to('cpu')
+   
+    model.eval().to(device)
+    print(f'Using {criteria} as weighting criteria and {reduction} as reduction method')
     if fields==None:
         fields_up,fields_down=get_successive_fields(X,model)
     else:
         fields_up,fields_down=fields
-    X=X[0]
-    if reduce=='none':
+    X=X[0].to(device)
+    Y_up=torch.clone(Y).to('cpu')
+    Y_down=torch.clone(Y).to('cpu')
+    n_classes=Y_up.shape[0]
+    if reduction=='none' and criteria!='distance':
         weights=torch.ones((n_classes,Y.shape[1],2,X.shape[-2],X.shape[-1]))*0.5
     else:
         weights=torch.ones((n_classes,Y.shape[1],2))*0.5
@@ -202,17 +215,25 @@ def propagate_by_composition(X,Y,model,fields=None,criteria='distance',reduce='m
         
         for chunk in chunks:
             for i in list(range(*chunk))[1:]:
-                composed_field_up=model.compose_list(fields_up[chunk[0]:i]).to('cuda')
-                composed_field_down=model.compose_list(fields_down[i:chunk[1]][::-1]).to('cuda')
-                Y_up[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[0]].unsqueeze(0).to('cuda'),composed_field_up).cpu().detach()[0]
-                Y_down[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[1]].unsqueeze(0).to('cuda'),composed_field_down).cpu().detach()[0]
+                composed_field_up=model.compose_list(fields_up[chunk[0]:i]).to(device)
+                composed_field_down=model.compose_list(fields_down[i:chunk[1]][::-1]).to(device)
+                Y_up[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[0]].unsqueeze(0).to(device),composed_field_up).cpu().detach()[0]
+                Y_down[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[1]].unsqueeze(0).to(device),composed_field_down).cpu().detach()[0]
                 if criteria=='ncc':
-                    w_up=NCC([15,15]).loss(model.apply_deform(to_batch(X[chunk[0]],'cuda'),composed_field_up),to_batch(X[i],'cuda'),False).cpu().detach()[0,0]
-                    w_down=NCC([15,15]).loss(model.apply_deform(to_batch(X[chunk[1]],'cuda'),composed_field_down),to_batch(X[i],'cuda'),False).cpu().detach()[0,0]
-                    if reduce=='mean':
+                    
+                    
+                    w_up=NCC([15,15]).loss(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device),False).cpu().detach()[0,0]*(chunk[1]-i)
+                    w_down=NCC([15,15]).loss(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device),False).cpu().detach()[0,0]*(i-chunk[0])
+                    # w_up=-LocalNormalizedCrossCorrelationLoss(2,kernel_size=15,reduction='none')(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device)).cpu().detach()[0,0]#*(chunk[1]-i)
+                    # w_down=-LocalNormalizedCrossCorrelationLoss(2,kernel_size=15,reduction='none')(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device)).cpu().detach()[0,0]#*(i-chunk[0])
+                    # w_up=torch.nn.MSELoss(reduction='none')(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device)).cpu().detach()[0,0]#*(chunk[1]-i)
+                    # w_down=torch.nn.MSELoss(reduction='none')(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device)).cpu().detach()[0,0]#*(i-chunk[0])
+                    # w_up=GlobalMutualInformationLoss()(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device)).cpu().detach()#*(chunk[1]-i)
+                    # w_down=GlobalMutualInformationLoss()(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device)).cpu().detach()#*(i-chunk[0])
+                    if reduction=='mean':
                         weights[lab,i,0]=w_up.mean()
                         weights[lab,i,1]=w_down.mean()
-                    elif reduce=='local_mean':
+                    elif reduction=='local_mean':
                         weights[lab,i,0]=w_up[Y_up[lab,i]>0.5].mean()
                         weights[lab,i,1]=w_down[Y_down[lab,i]>0.5].mean()
                     else:
@@ -222,11 +243,14 @@ def propagate_by_composition(X,Y,model,fields=None,criteria='distance',reduce='m
                     weights[lab,i,1]=torch.tensor(0.5+np.arctan(i-chunk[0]-(chunk[1]-chunk[0])/2)/3.14)#arctan(C(k−(j−i)/2))/π
                     weights[lab,i,0]=1-weights[lab,i,1]
  
-    if func: weights=func(weights)
-    Y_up[0]=1-torch.mean(Y_up[1:],0)
-    Y_down[0]=1-torch.mean(Y_down[1:],0)
+    if func and criteria != 'distance': weights=func(weights)
+    Y_up[0]=1-torch.max(Y_up[1:],0)[0]
+    Y_down[0]=1-torch.max(Y_down[1:],0)[0]
     Y_fused=fuse_up_and_down(Y_up,Y_down,weights)
-    return Y_up,Y_down,Y_fused
+    if return_weights:
+        return Y_up,Y_down,Y_fused,weights
+    else:
+        return Y_up,Y_down,Y_fused
 
 # def propagate_with_optimized_weights(X,Y,Y_dense,model):
 
@@ -309,14 +333,16 @@ def compute_metrics(y_pred,y):
     else:
         dice=torch.from_numpy(np.array([0.]))
             
-    if len(torch.unique(torch.argmax(y_pred,1)))>1:
-        hauss=med.hd(y_pred.cpu().numpy()>0,y.cpu().numpy()>0)
-        asd=med.asd(y_pred.cpu().numpy()>0, y.cpu().numpy()>0)
-    else:
-        hauss=torch.sqrt(torch.tensor(y.shape[-1]^2+y.shape[-2]^2))
-        asd=torch.sqrt(torch.tensor(y.shape[-1]^2+y.shape[-2]^2))
+    # if len(torch.unique(torch.argmax(y_pred,1)))>1:
+    #     hauss=med.hd(y_pred.cpu().numpy()>0,y.cpu().numpy()>0)
+    #     asd=med.asd(y_pred.cpu().numpy()>0, y.cpu().numpy()>0)
+    # else:
+    #     hauss=torch.sqrt(torch.tensor(y.shape[-1]^2+y.shape[-2]^2))
+    #     asd=torch.sqrt(torch.tensor(y.shape[-1]^2+y.shape[-2]^2))
 
-    return dice,torch.tensor(hauss),torch.tensor(asd)
+    return dice,torch.zeros(1),torch.zeros(1)#torch.tensor(hauss),torch.tensor(asd)
+
+
 
 def get_dices(Y_dense,Y,Y2,selected_slices):
     weights=get_weights(remove_annotations(deepcopy(Y_dense),selected_slices))
