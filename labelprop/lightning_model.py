@@ -346,8 +346,11 @@ class LabelProp(pl.LightningModule):
                 #         loss+=self.compute_loss(prop_x_up,prop_x_down)
                     # loss+=nn.L1Loss()(self.apply_deform(X[:,:,chunk[0],...], self.compose_deformation(composed_fields_up,composed_fields_down)),X[:,:,chunk[0],...])
                     # loss+=nn.L1Loss()(self.apply_deform(X[:,:,chunk[1],...], self.compose_deformation(composed_fields_down,composed_fields_up)),X[:,:,chunk[1],...])
-                    loss=losses['seg']+losses['sim']+losses['comp']+losses['smooth']#+losses['mask_prop']#+losses['bending']#+losses['contours']##torch.stack([v for v in losses.values()]).mean() 
-                    
+                    loss=losses['sim']+losses['smooth']#+losses['mask_prop']#+losses['bending']#+losses['contours']##torch.stack([v for v in losses.values()]).mean() 
+                    if self.losses['compo-dice-up'] or self.losses['compo-dice-down']:
+                        loss+=losses['seg']
+                    if self.losses['compo-reg-up'] or self.losses['compo-reg-down']:
+                        loss+=losses['comp']
                     # loss=self.loss_model(losses)
                     self.log_dict({'loss':loss},prog_bar=True)
                     self.manual_backward(loss)

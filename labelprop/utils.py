@@ -143,8 +143,8 @@ def get_successive_fields(X,model):
     for i in range(X.shape[0]-1):
         x1=X[i]
         x2=X[i+1]
-        fields_up.append(model(to_batch(x1,device),to_batch(x2,device))[1])
-        fields_down.append(model(to_batch(x2,device),to_batch(x1,device))[1])
+        fields_up.append(model(to_batch(x1,device),to_batch(x2,device))[1].detach().cpu())
+        fields_down.append(model(to_batch(x2,device),to_batch(x1,device))[1].detach().cpu())
     return fields_up,fields_down
 
 def propagate_labels(X,Y,model,model_down=None):
@@ -190,7 +190,7 @@ class Normalize(torch.nn.Module):
     def forward(self, x):
         return x / torch.sum(x, dim=self.dim, keepdim=True)
 
-def propagate_by_composition(X,Y,model,fields=None,criteria='distance',reduction='mean',func=Normalize(2),device='cuda',return_weights=False):
+def propagate_by_composition(X,Y,model,fields=None,criteria='distance',reduction='mean',func=Normalize(2),device='cuda',return_weights=False,patch_size=31):
     X=X.to(device)
     Y=Y.to('cpu')
    
@@ -201,6 +201,8 @@ def propagate_by_composition(X,Y,model,fields=None,criteria='distance',reduction
     else:
         fields_up,fields_down=fields
     X=X[0].to(device)
+    fields_up=[f.to(device) for f in fields_up]
+    fields_down=[f.to(device) for f in fields_down]
     Y_up=torch.clone(Y).to('cpu')
     Y_down=torch.clone(Y).to('cpu')
     n_classes=Y_up.shape[0]
@@ -222,10 +224,10 @@ def propagate_by_composition(X,Y,model,fields=None,criteria='distance',reduction
                 if criteria=='ncc':
                     
                     
-                    w_up=NCC([15,15]).loss(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device),False).cpu().detach()[0,0]*(chunk[1]-i)
-                    w_down=NCC([15,15]).loss(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device),False).cpu().detach()[0,0]*(i-chunk[0])
-                    # w_up=-LocalNormalizedCrossCorrelationLoss(2,kernel_size=15,reduction='none')(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device)).cpu().detach()[0,0]#*(chunk[1]-i)
-                    # w_down=-LocalNormalizedCrossCorrelationLoss(2,kernel_size=15,reduction='none')(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device)).cpu().detach()[0,0]#*(i-chunk[0])
+                    # w_up=NCC([15,15]).loss(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device),False).cpu().detach()[0,0]
+                    # w_down=NCC([15,15]).loss(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device),False).cpu().detach()[0,0]
+                    w_up=-LocalNormalizedCrossCorrelationLoss(2,kernel_size=patch_size,reduction='none')(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device)).cpu().detach()[0,0]#*(chunk[1]-i)
+                    w_down=-LocalNormalizedCrossCorrelationLoss(2,kernel_size=patch_size,reduction='none')(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device)).cpu().detach()[0,0]#*(i-chunk[0])
                     # w_up=torch.nn.MSELoss(reduction='none')(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device)).cpu().detach()[0,0]#*(chunk[1]-i)
                     # w_down=torch.nn.MSELoss(reduction='none')(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device)).cpu().detach()[0,0]#*(i-chunk[0])
                     # w_up=GlobalMutualInformationLoss()(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device)).cpu().detach()#*(chunk[1]-i)

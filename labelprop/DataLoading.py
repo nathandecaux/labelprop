@@ -42,7 +42,7 @@ class FullScan(data.Dataset):
                     preselected=[annotated[lab][0]+int(chunk_range*(x/n)) for x in range(n+1)]
                     #Get values of annotated[lab] that are the closest to the preselected values
                     print(preselected)
-                    if n_slices=='3':
+                    if False:#n_slices=='3':
                         median=int(len(annotated[lab])/2)
                         selected_slices[lab]=[annotated[lab][0],annotated[lab][median],annotated[lab][-1]]
                     else:
@@ -56,6 +56,11 @@ class FullScan(data.Dataset):
                     for i in range(self.Y.shape[2]):
                         if i not in selected_slices[lab]:
                             self.Y[:,lab,i]=self.Y[:,lab,i]*0
+            else:
+                for lab in selected_slices.keys():
+                    for i in range(self.Y.shape[2]):
+                        if i not in selected_slices[lab]:
+                            self.Y[:,int(lab),i]=self.Y[:,int(lab),i]*0
         self.selected_slices=selected_slices
         # self.Y=torch.moveaxis(func.one_hot(self.Y.long()), -1, 1).float()
 
@@ -137,8 +142,8 @@ class LabelPropDataModule(pl.LightningDataModule):
             mask=self.mask_path
         self.val_dataset=None
         self.train_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=self.selected_slices,z_axis=self.z_axis)
-        # if self.selected_slices!=None:
-        #     self.val_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=None,z_axis=self.z_axis)
+        if self.selected_slices!=None:
+            self.val_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=None,z_axis=self.z_axis)
         self.test_dataset=self.train_dataset
 
     def train_dataloader(self,batch_size=1):

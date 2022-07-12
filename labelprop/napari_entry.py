@@ -141,7 +141,7 @@ def get_fields(img,ckpt,mask=None,z_axis=2,selected_slices=None):
     st=SuperST(size=shape)
     X,Y=dm.train_dataloader().dataset[0]
     model=LabelProp(shape=shape).load_from_checkpoint(ckpt,device='cuda')
-    fields_up,fields_down=get_successive_fields(X, model.to('cuda'))
-    return fields_up,fields_down,X,Y
+    fields_up,fields_down=get_successive_fields(X.to('cuda'), model.to('cuda'))
+    return torch.cat(fields_up,0).detach().cpu(),torch.cat(fields_down,0).detach().cpu(),X.detach().cpu(),Y.detach().cpu()
 
 
