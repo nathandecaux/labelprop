@@ -11,23 +11,20 @@ with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
 requirements = [
-    'setuptools==58.0.4',
-    'torchmetrics==0.7.3',
-    'kornia==0.5.8',
-    'medpy==0.4.0',
-    'monai==0.6.0',
-    'nibabel==3.2.1',
-
-    'pytorch_lightning==1.3.8',
-    'torch==1.10.2',
-    'torchio==0.18.47',
-    'torchvision==0.11.3',
-    "Flask",
-    "plotext==5.0.2"]
+'Flask==2.1.0',
+'kornia==0.6.5',
+'MedPy==0.4.0',
+'monai==0.8.1',
+'nibabel==3.2.1',
+'numpy==1.20.3',
+'plotext==4.2.0',
+'pytorch_lightning==1.6.3',
+'setuptools==59.5.0',
+'torchio==0.18.47']
 
 test_requirements = [ ]
 
-dependency_links = ['https://download.pytorch.org/whl/cu111']
+dependency_links = []
 
 setup(
     author="Nathan Decaux",
