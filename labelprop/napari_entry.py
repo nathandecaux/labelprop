@@ -124,7 +124,7 @@ def propagate_from_fields(img,mask,fields_up,fields_down,shape,z_axis=2,selected
         Y_up=torch.moveaxis(torch.argmax(Y_up,0),0,z_axis)
         Y_down=torch.moveaxis(torch.argmax(Y_down,0),0,z_axis)
         Y_fused=torch.moveaxis(torch.argmax(Y_fused,0),0,z_axis)
-    print(Y_up.shape)
+    # print(Y_up.shape)
     Y_up=resample(Y_up,true_shape)
     Y_down=resample(Y_down,true_shape)
     Y_fused=resample(Y_fused,true_shape)

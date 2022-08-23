@@ -149,11 +149,11 @@ class LabelPropDataModule(pl.LightningDataModule):
     def train_dataloader(self,batch_size=1):
         return DataLoader(self.train_dataset, 1, num_workers=16,pin_memory=True)
 
-    def val_dataloader(self):
-        if self.val_dataset is None:
-            return None
-        else:
-            return DataLoader(self.val_dataset, 1, num_workers=16,pin_memory=True)
+    # def val_dataloader(self):
+    #     if self.val_dataset is None:
+    #         return None
+    #     else:
+    #         return DataLoader(self.val_dataset, 1, num_workers=16,pin_memory=True)
     
     def test_dataloader(self):
         return DataLoader(self.test_dataset, 1, num_workers=16, pin_memory=True)

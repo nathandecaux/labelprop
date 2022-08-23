@@ -237,7 +237,7 @@ class LabelProp(pl.LightningModule):
                     loss_down_sim=[]
                     loss_down_smooth=[]
                     loss=0
-                    losses={'sim':None,'seg':None,'comp':None,'smooth':None}
+                    losses={'sim':0,'seg':0,'comp':0,'smooth':0}
 
 
                     for i in range(chunk[0],chunk[1]):
@@ -277,9 +277,11 @@ class LabelProp(pl.LightningModule):
 
                     #Better with mean
                     if self.way=='up':
-                        loss=torch.stack(loss_up).mean()
+                        losses['sim']=torch.stack(loss_up_sim).mean()
+                        losses['smooth']=torch.stack(loss_up_smooth).mean()
                     elif self.way=='down':
-                        loss=torch.stack(loss_down).mean()
+                        losses['sim']=torch.stack(loss_down_sim).mean()
+                        losses['smooth']=torch.stack(loss_down_smooth).mean()
                     else:
                         losses['sim']=torch.stack(loss_up_sim).mean()+torch.stack(loss_down_sim).mean()
                         losses['smooth']=torch.stack(loss_up_smooth).mean()+torch.stack(loss_down_smooth).mean()
