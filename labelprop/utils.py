@@ -190,7 +190,7 @@ class Normalize(torch.nn.Module):
     def forward(self, x):
         return x / torch.sum(x, dim=self.dim, keepdim=True)
 
-def propagate_by_composition(X,Y,model,fields=None,criteria='distance',reduction='mean',func=Normalize(2),device='cuda',return_weights=False,patch_size=31):
+def propagate_by_composition(X,Y,model,fields=None,criteria='ncc',reduction='none',func=Normalize(2),device='cuda',return_weights=False,patch_size=31):
     X=X.to(device)
     Y=Y.to('cpu')
    

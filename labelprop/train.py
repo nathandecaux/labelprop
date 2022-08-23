@@ -11,7 +11,7 @@ from copy import copy,deepcopy
 import medpy.metric as med
 from .lightning_model import LabelProp
 from .Pretraining_model import LabelProp as PretrainingModel
-from .voxelmorph2d import NCC,SpatialTransformer
+from .voxelmorph2d import NCC,SpatialTransformer,VecInt
 # from .weight_optimizer import optimize_weights
 import plotext as plt
 from monai.losses import GlobalMutualInformationLoss
@@ -66,7 +66,10 @@ def train(datamodule,model_PARAMS,max_epochs,ckpt=None,pretraining=False):
   
     model=LabelProp(**model_PARAMS)
     if ckpt!=None:
-        model=model.load_from_checkpoint(ckpt,strict=False,**model_PARAMS)
+        #Load weights from checkpoint only for model.registrator.unet_model and model.registrator.flow
+        trained_model=LabelProp.load_from_checkpoint(ckpt,strict=False)
+        model.registrator.unet_model.load_state_dict(trained_model.registrator.unet_model.state_dict())
+        model.registrator.flow.load_state_dict(trained_model.registrator.flow.state_dict())
     trainer=Trainer(gpus=1,max_epochs=max_epochs,callbacks=checkpoint_callback)
     trainer.fit(model,datamodule)
     #model=model.load_from_checkpoint(checkpoint_callback.best_model_path)
@@ -75,7 +78,9 @@ def train(datamodule,model_PARAMS,max_epochs,ckpt=None,pretraining=False):
 
 def inference(datamodule,model_PARAMS,ckpt,**kwargs):
     model=LabelProp(**model_PARAMS)
-    model=model.load_from_checkpoint(ckpt,strict=False)
+    trained_model=LabelProp.load_from_checkpoint(ckpt,strict=False)
+    model.registrator.unet_model.load_state_dict(trained_model.registrator.unet_model.state_dict())
+    model.registrator.flow.load_state_dict(trained_model.registrator.flow.state_dict())
     datamodule.setup('fit')
     X,Y=datamodule.train_dataloader().dataset[0]
     # weights=get_weights(Y)

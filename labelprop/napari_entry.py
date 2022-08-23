@@ -10,9 +10,16 @@ from os.path import join
 import shutil
 import nibabel as ni
 import pathlib
-ckpt_dir='/home/nathan/checkpoints/'
-# ckpt_dir='F:/checkpoints/'
+
+#Get user home directory
+home=pathlib.Path.home()
+ckpt_dir=join(home,'checkpoints')
+pathlib.Path(ckpt_dir).mkdir(parents=True,exist_ok=True)
+
 def resample(Y,size):
+    """
+    Resample a label tensor to the given size
+    """
     Y=torch.moveaxis(func.one_hot(Y.long()),-1,0)
     Y=func.interpolate(Y[None,...]*1.,size,mode='trilinear',align_corners=True)[0]
 
@@ -20,12 +27,18 @@ def resample(Y,size):
 
 
 def propagate_from_ckpt(img,mask,checkpoint,shape=304,z_axis=2,label='all',**kwargs):
+    """
+    Propagate labels using a checkpoint
+    """
     if str(label)=='0': label='all'
+    if isinstance(img,str): img=ni.load(img).get_fdata()
+    if isinstance(mask,str): mask=ni.load(mask).get_fdata()
     true_shape=img.shape
     by_composition=True
     n_classes=int(np.max(mask))
-    ckpt=join(ckpt_dir,checkpoint)
-    shape=torch.load(ckpt)['hyper_parameters']['shape']
+    if '/' not in checkpoint:
+        checkpoint=join(ckpt_dir,checkpoint)
+    shape=(shape,shape)#torch.load(checkpoint)['hyper_parameters']['shape']
     losses={'compo-reg-up':True,'compo-reg-down':True,'compo-dice-up':True,'compo-dice-down':True,'bidir-cons-reg':False,'bidir-cons-dice':False}
     model_PARAMS={'n_classes':n_classes,'way':'both','shape':shape,'selected_slices':None,'losses':losses,'by_composition':by_composition}
     print('hey ho')
@@ -33,7 +46,7 @@ def propagate_from_ckpt(img,mask,checkpoint,shape=304,z_axis=2,label='all',**kwa
     dm=LabelPropDataModule(img_path=img,mask_path=mask,lab=label,shape=shape,selected_slices=None,z_axis=z_axis)
 
     #Inference
-    Y_up,Y_down,Y_fused=inference(datamodule=dm,model_PARAMS=model_PARAMS,ckpt=ckpt,**kwargs)
+    Y_up,Y_down,Y_fused=inference(datamodule=dm,model_PARAMS=model_PARAMS,ckpt=checkpoint,**kwargs)
     if z_axis!=0:
         Y_up=torch.moveaxis(Y_up,0,z_axis)
         Y_down=torch.moveaxis(Y_down,0,z_axis)
@@ -44,13 +57,19 @@ def propagate_from_ckpt(img,mask,checkpoint,shape=304,z_axis=2,label='all',**kwa
     return Y_up.cpu().detach().numpy(),Y_down.cpu().detach().numpy(),Y_fused.cpu().detach().numpy()
 
 def train_and_infer(img,mask,pretrained_ckpt,shape,max_epochs,z_axis=2,output_dir='~/label_prop_checkpoints',name='',pretraining=False):
+    """
+    Train a model and propagate provided labels
+    """
+
     way='both'
     if pretrained_ckpt!=None:
-        ckpt=join(ckpt_dir,pretrained_ckpt)
-        shape=torch.load(ckpt)['hyper_parameters']['shape'][0]
+        if '/' not in pretrained_ckpt:
+            pretrained_ckpt=join(ckpt_dir,pretrained_ckpt)
+        # shape=torch.load(pretrained_ckpt)['hyper_parameters']['shape'][0]
+    if isinstance(img,str): img=ni.load(img).get_fdata()
+    if isinstance(mask,str): mask=ni.load(mask).get_fdata()
     true_shape=img.shape
     shape=(shape,shape)
-    by_composition=True
     n_classes=len(np.unique(mask))
     losses={'compo-reg-up':True,'compo-reg-down':True,'compo-dice-up':True,'compo-dice-down':True,'bidir-cons-reg':False,'bidir-cons-dice':False}
     model_PARAMS={'n_classes':n_classes,'way':way,'shape':shape,'selected_slices':None,'losses':losses,'by_composition':False,'unsupervised':pretraining}
@@ -81,6 +100,10 @@ def train_and_infer(img,mask,pretrained_ckpt,shape,max_epochs,z_axis=2,output_di
 
 
 def pretrain(img_list,shape,z_axis=2,output_dir='~/label_prop_checkpoints',name='',max_epochs=100):
+    """
+    Pretrain a model on a list of images
+    """
+    
     shape=(shape,shape)
     unsupervised=True
     model_PARAMS={'shape':shape,'unsupervised':unsupervised}
@@ -93,19 +116,22 @@ def pretrain(img_list,shape,z_axis=2,output_dir='~/label_prop_checkpoints',name=
     #copy file to output_dir with pathlib, create folder if it doesn't exist
     pathlib.Path(output_dir).mkdir(parents=True,exist_ok=True)
     shutil.copyfile(best_ckpt,join(output_dir,f'{name.split(".ckpt")[-1]}.ckpt'))
-    #Get successive deformation fields
-    trained_model.load_from_checkpoint(checkpoint_path=best_ckpt,device='cuda')
-    for i,scan_dataset in enumerate(dm.train_dataloader().dataset.datasets):
-        X=scan_dataset[0]
-        fields_up,fields_down=get_successive_fields(X, trained_model.to('cuda'))
-        fields_up=torch.stack(tensors=fields_up,dim=0).detach().cpu()
-        fields_down=torch.stack(tensors=fields_down,dim=0).detach().cpu()
-        name=scan_dataset.name.split('/')[-1]
-        #Save fields
-        torch.save(fields_up,join(output_dir,f'{name}_up.pt'))
-        torch.save(fields_down,join(output_dir,f'{name}_down.pt'))
+    # #Get successive deformation fields
+    # trained_model.load_from_checkpoint(checkpoint_path=best_ckpt,device='cuda')
+    # for i,scan_dataset in enumerate(dm.train_dataloader().dataset.datasets):
+    #     X=scan_dataset[0]
+    #     fields_up,fields_down=get_successive_fields(X, trained_model.to('cuda'))
+    #     fields_up=torch.stack(tensors=fields_up,dim=0).detach().cpu()
+    #     fields_down=torch.stack(tensors=fields_down,dim=0).detach().cpu()
+    #     name=scan_dataset.name.split('/')[-1]
+    #     #Save fields
+    #     torch.save(fields_up,join(output_dir,f'{name}_up.pt'))
+    #     torch.save(fields_down,join(output_dir,f'{name}_down.pt'))
 
 def propagate_from_fields(img,mask,fields_up,fields_down,shape,z_axis=2,selected_slices=None,kwargs={}):
+    """
+    Propagate labels from successive deformation fields
+    """
     if isinstance(img,str):
         true_shape=ni.load(img).get_fdata().shape
     else:
@@ -134,6 +160,9 @@ def propagate_from_fields(img,mask,fields_up,fields_down,shape,z_axis=2,selected
         return Y_up.cpu().detach().numpy(),Y_down.cpu().detach().numpy(),Y_fused.cpu().detach().numpy(),weights.cpu().detach().numpy()
 
 def get_fields(img,ckpt,mask=None,z_axis=2,selected_slices=None):
+    """
+    Get successive deformation fields from a checkpoint
+    """
     shape=torch.load(ckpt)['hyper_parameters']['shape']
     if mask==None: mask=img
     dm=LabelPropDataModule(img_path=img,mask_path=mask,lab='all',shape=shape,selected_slices=selected_slices,z_axis=z_axis)
