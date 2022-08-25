@@ -56,7 +56,7 @@ def propagate_from_ckpt(img,mask,checkpoint,shape=304,z_axis=2,label='all',**kwa
     Y_fused=resample(Y_fused,true_shape)
     return Y_up.cpu().detach().numpy(),Y_down.cpu().detach().numpy(),Y_fused.cpu().detach().numpy()
 
-def train_and_infer(img,mask,pretrained_ckpt,shape,max_epochs,z_axis=2,output_dir='~/label_prop_checkpoints',name='',pretraining=False):
+def train_and_infer(img,mask,pretrained_ckpt,shape,max_epochs,z_axis=2,output_dir='~/label_prop_checkpoints',name='',pretraining=False,**kwargs):
     """
     Train a model and propagate provided labels
     """
@@ -80,11 +80,11 @@ def train_and_infer(img,mask,pretrained_ckpt,shape,max_epochs,z_axis=2,output_di
     else:
         dm=PreTrainingDataModule(img_list=[img],shape=shape,z_axis=z_axis)
     #Training and testing
-    trained_model,best_ckpt=train(datamodule=dm,model_PARAMS=model_PARAMS,max_epochs=max_epochs,ckpt=pretrained_ckpt,pretraining=pretraining)
+    trained_model,best_ckpt=train(datamodule=dm,model_PARAMS=model_PARAMS,max_epochs=max_epochs,ckpt=pretrained_ckpt,pretraining=pretraining,**kwargs)
     best_ckpt=str(best_ckpt)
 
     dm=LabelPropDataModule(img_path=img,mask_path=mask,lab='all',shape=shape,selected_slices=None,z_axis=z_axis)
-    Y_up,Y_down,Y_fused=inference(datamodule=dm,model_PARAMS=model_PARAMS,ckpt=best_ckpt)
+    Y_up,Y_down,Y_fused=inference(datamodule=dm,model_PARAMS=model_PARAMS,ckpt=best_ckpt,**kwargs)
     if z_axis!=0:
         Y_up=torch.moveaxis(Y_up,0,z_axis)
         Y_down=torch.moveaxis(Y_down,0,z_axis)

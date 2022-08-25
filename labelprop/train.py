@@ -50,7 +50,7 @@ def train_and_eval(datamodule,model_PARAMS,max_epochs,ckpt=None):
     res['ckpt']=checkpoint_callback.best_model_path if ckpt==None else ckpt
     return model,Y_up,Y_down,res
 
-def train(datamodule,model_PARAMS,max_epochs,ckpt=None,pretraining=False):
+def train(datamodule,model_PARAMS,max_epochs,ckpt=None,pretraining=False,**kwargs):
     # datetime object containing current date and time
     now = datetime.now()
     # dd/mm/YY H:M:S
@@ -70,7 +70,11 @@ def train(datamodule,model_PARAMS,max_epochs,ckpt=None,pretraining=False):
         trained_model=LabelProp.load_from_checkpoint(ckpt,strict=False)
         model.registrator.unet_model.load_state_dict(trained_model.registrator.unet_model.state_dict())
         model.registrator.flow.load_state_dict(trained_model.registrator.flow.state_dict())
-    trainer=Trainer(gpus=1,max_epochs=max_epochs,callbacks=checkpoint_callback)
+    gpus=1
+    if 'device' in kwargs:
+        if kwargs['device']=='cpu': gpus=0
+
+    trainer=Trainer(gpus=gpus,max_epochs=max_epochs,callbacks=checkpoint_callback)
     trainer.fit(model,datamodule)
     #model=model.load_from_checkpoint(checkpoint_callback.best_model_path)
     best_ckpt=checkpoint_callback.best_model_path
