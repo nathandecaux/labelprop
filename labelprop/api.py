@@ -14,8 +14,34 @@ import functools
 import logging
 from copy import deepcopy
 app=Flask(__name__)
+package_path = os.path.dirname(os.path.abspath(__file__))
+server=json.load(fp=open(os.path.join(package_path,'conf.json')))
+checkpoint_dir=server['checkpoint_dir']
+#If checkpoint dir does not exist, create it
+if not os.path.exists(checkpoint_dir):
+    os.makedirs(checkpoint_dir)
 
-checkpoint_dir='/home/nathan/checkpoints/'
+
+@app.route('/get_ckpt_dir',methods=['GET'])
+def get_ckpt_dir():
+    server=json.load(fp=open(os.path.join(package_path,'conf.json')))
+    return server['checkpoint_dir']
+
+@app.route('/set_ckpt_dir',methods=['POST'])
+def set_ckpt_dir():
+    ckpt_dir=request.args['ckpt_dir']
+    global checkpoint_dir
+    checkpoint_dir=ckpt_dir
+    try:
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+    except Exception as e:
+        return "Unallowed to create checkpoint directory"
+    #Save checkpoint dir in conf.json
+    server['checkpoint_dir']=ckpt_dir
+    with open(os.path.join(package_path,'conf.json'),'w') as f:
+        json.dump(server,f)
+    return 'ok'
 # checkpoint_dir='F:/checkpoints/'
     
 global sessions
@@ -120,9 +146,9 @@ def training():
         img=arrays['img']
         hash=hash_array(img)
 
-    infos['output_dir']=checkpoint_dir
+    infos['output_dir']=get_ckpt_dir()
     if infos['pretrained_ckpt']!='':
-        infos['pretrained_ckpt']=join(checkpoint_dir,infos['pretrained_ckpt'])
+        infos['pretrained_ckpt']=join(get_ckpt_dir(),infos['pretrained_ckpt'])
     else:
         infos['pretrained_ckpt']=None
     token=str(uuid.uuid4())
@@ -157,7 +183,7 @@ def list_ckpts():
     """
     Return a list of all checkpoints in the checkpoint_dir.
     """
-    return ','.join([x for x in os.listdir(checkpoint_dir) if '.ckpt' in x])
+    return ','.join([x for x in os.listdir(get_ckpt_dir()) if x.endswith('.ckpt')])
 
 @app.route('/list_hash',methods=['GET'])
 def list_hashes():
@@ -166,6 +192,14 @@ def list_hashes():
     """
     return ','.join(get_tmp_hashed_img())
  
+@app.route('/send_ckpt',methods=['POST'])
+def send_ckpt():
+    """
+    Receive a checkpoint file and save it in the checkpoint_dir.
+    """
+    ckpt=request.files['ckpt']
+    ckpt.save(join(get_ckpt_dir(),ckpt.filename))
+    return 'ok'
 
 @app.route('/download_inference',methods=['GET','POST'])
 def download_inference():
