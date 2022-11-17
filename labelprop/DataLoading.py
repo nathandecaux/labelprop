@@ -6,11 +6,21 @@ from torch.utils.data import DataLoader,ConcatDataset
 import torchio.transforms as tio
 from torch.nn import functional as func
 import torch
-
+import numpy as np
 
 class FullScan(data.Dataset):
-    def __init__(self, X, Y,lab='all',shape=256,selected_slices=None,z_axis=-1):
+    def __init__(self, X, Y,lab='all',shape=256,selected_slices=None,z_axis=-1,hints=None):
+        """
+        X: single channel numpy array
+        Y: segmentation map numpy array
+        lab: label to propagate
+        shape: shape of the images
+        selected_slices: slices to keep for training
+        z_axis: axis of the z axis
+        hints: sparse annotations as numpy array to use as hints 
+        """
         self.X = X.astype('float32')
+        self.hints=hints
         if isinstance(lab,int):
             Y= 1.*(Y==lab)
         self.Y=Y*1.
@@ -22,8 +32,9 @@ class FullScan(data.Dataset):
         
         if isinstance(shape,int): shape=(shape,shape) 
         self.Y=torch.moveaxis(func.one_hot(self.Y.long()),-1,1)
-        self.X,self.Y=self.resample(self.X,self.Y,(self.Y.shape[2],shape[0],shape[1]))
-
+        self.shape=(self.Y.shape[2],shape[0],shape[1])
+        self.X,self.Y=self.resample(self.X,self.Y,self.shape)
+        self.Y=(self.Y>0.5)*1.
         if selected_slices!=None:
             if 'bench' in selected_slices:
                 n_slices=selected_slices.split('_')[1]
@@ -62,12 +73,29 @@ class FullScan(data.Dataset):
                         if i not in selected_slices[lab]:
                             self.Y[:,int(lab),i]=self.Y[:,int(lab),i]*0
         self.selected_slices=selected_slices
+
+        #Preprocess hints exactly like Y
+        if isinstance(self.hints,np.ndarray):
+            self.hints=hints
+            self.hints = torch.from_numpy(self.hints)[None,...]
+            if z_axis!=0:
+                self.hints=torch.moveaxis(self.hints,z_axis+1,1)
+            self.hints[self.hints==255]=self.Y.shape[1]
+            self.hints=torch.moveaxis(func.one_hot(self.hints.long(),self.Y.shape[1]+1),-1,1)
+            self.hints = func.interpolate(self.hints*1.0,self.shape,mode='trilinear',align_corners=True)
+            self.hints=(self.hints>0.5)*1.
+
+
         # self.Y=torch.moveaxis(func.one_hot(self.Y.long()), -1, 1).float()
 
     def __getitem__(self, index):
         x = self.X[index]
         y = self.Y[index]
-        return x.unsqueeze(0), y
+        if self.hints!=None:
+            hints=self.hints[index]
+            return x.unsqueeze(0),y,hints
+        else:
+            return x.unsqueeze(0), y
     def resample(self,X,Y,size):
         X=func.interpolate(X[None,...],size,mode='trilinear',align_corners=True)[0]
         Y=func.interpolate(Y*1.0,size,mode='trilinear',align_corners=True)
@@ -125,10 +153,11 @@ class UnsupervisedScan(data.Dataset):
 
 
 class LabelPropDataModule(pl.LightningDataModule):
-    def __init__(self, img_path,mask_path,lab='all',shape=(288,288),selected_slices=None,z_axis=0):
+    def __init__(self, img_path,mask_path,lab='all',shape=(288,288),selected_slices=None,z_axis=0,hints=None):
         super().__init__()
         self.img_path=img_path
         self.mask_path=mask_path
+        self.hints=hints
         self.shape=shape
         self.lab=lab
         self.selected_slices=selected_slices
@@ -141,7 +170,7 @@ class LabelPropDataModule(pl.LightningDataModule):
             img=self.img_path
             mask=self.mask_path
         self.val_dataset=None
-        self.train_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=self.selected_slices,z_axis=self.z_axis)
+        self.train_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=self.selected_slices,z_axis=self.z_axis,hints=self.hints)
         if self.selected_slices!=None:
             self.val_dataset=FullScan(img, mask,lab=self.lab,shape=self.shape,selected_slices=None,z_axis=self.z_axis)
         self.test_dataset=self.train_dataset
@@ -157,6 +186,7 @@ class LabelPropDataModule(pl.LightningDataModule):
     
     def test_dataloader(self):
         return DataLoader(self.test_dataset, 1, num_workers=16, pin_memory=True)
+
 
 class PreTrainingDataModule(pl.LightningDataModule):
     def __init__(self, img_list,shape=(288,288),z_axis=0):
@@ -177,3 +207,31 @@ class PreTrainingDataModule(pl.LightningDataModule):
 
     def train_dataloader(self,batch_size=None):
         return DataLoader(self.train_dataset, 1, num_workers=8,pin_memory=True,shuffle=False)
+
+class BatchLabelPropDataModule(pl.LightningDataModule):
+    """
+    Equivalent to LabelPropDataModule, but for multiple images
+    """
+    def __init__(self,img_path_list,mask_path_list,lab='all',shape=(288,288),z_axis=0):
+        super().__init__()
+        self.img_path_list=img_path_list
+        self.mask_path_list=mask_path_list
+        self.shape=shape
+        self.lab=lab
+        self.z_axis=z_axis
+    def setup(self, stage=None):
+        self.val_dataset=None
+        datasets=[]
+        for i,(img_path,mask_path) in enumerate(zip(self.img_path_list,self.mask_path_list)):
+            if isinstance(img_path,str):
+                img=ni.load(img_path).get_fdata()
+                mask=ni.load(mask_path).get_fdata()
+            else:
+                img=img_path
+                mask=mask_path
+            datasets.append(FullScan(img, mask,lab=self.lab,shape=self.shape,z_axis=self.z_axis))
+        self.train_dataset=ConcatDataset(datasets)
+        self.test_dataset=self.train_dataset
+    
+    def train_dataloader(self,batch_size=1):
+        return DataLoader(self.train_dataset, 1)

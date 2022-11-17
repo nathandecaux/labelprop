@@ -86,8 +86,14 @@ def inference(datamodule,model_PARAMS,ckpt,**kwargs):
     model.registrator.unet_model.load_state_dict(trained_model.registrator.unet_model.state_dict())
     model.registrator.flow.load_state_dict(trained_model.registrator.flow.state_dict())
     datamodule.setup('fit')
-    X,Y=datamodule.train_dataloader().dataset[0]
+    tensors=datamodule.train_dataloader().dataset[0]
+    X=tensors[0]
+    Y=tensors[1]
+    hints=None
+    if len(tensors)==3:
+        hints=tensors[2]
+
     # weights=get_weights(Y)
-    Y_up,Y_down,Y_fused=propagate_by_composition(X,Y,model,**kwargs)
+    Y_up,Y_down,Y_fused=propagate_by_composition(X,Y,hints,model,**kwargs)
     # Y_fused=fuse_up_and_down(Y_up,Y_down,weights)
     return torch.argmax(Y_up,0),torch.argmax(Y_down,0),torch.argmax(Y_fused,0)

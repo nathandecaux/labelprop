@@ -95,18 +95,24 @@ def inference():
     
     token=str(uuid.uuid4())
     mask=arrays['mask']
+    hints=None
+    if 'hints' in arrays.keys():
+        hints=arrays['hints']
     print(token)
     #Save img and mask to /tmp folder
     img_path=join('/tmp/',hash+'_img.npy')
     mask_path=join('/tmp/',hash+'_mask.npy')
     np.save(img_path,img)
     np.save(mask_path,mask)
+    # if hints is not None:
+    #     hints_path=join('/tmp/',hash+'_hints.npy')
+    #     np.save(hints_path,hints)
 
     response=Response(token)
     @response.call_on_close
     def process_after_request():
         try:
-            Y_up,Y_down,Y_fused=propagate_from_ckpt(img,mask,**infos)
+            Y_up,Y_down,Y_fused=propagate_from_ckpt(img,mask,hints=hints,**infos)
             print(np.unique(Y_up))
             sessions[token]={'img':img_path,'mask':mask_path,'infos':infos}
             sessions[token]['hash']=hash
@@ -145,10 +151,12 @@ def training():
     else:
         img=arrays['img']
         hash=hash_array(img)
-
+    hints=None
+    if 'hints' in arrays.keys():
+        hints=arrays['hints']
     infos['output_dir']=get_ckpt_dir()
     if infos['pretrained_ckpt']!='':
-        infos['pretrained_ckpt']=join(get_ckpt_dir(),infos['pretrained_ckpt'])
+        infos['pretrained_ckpt']=os.path.join(str(get_ckpt_dir()),str(infos['pretrained_ckpt']))
     else:
         infos['pretrained_ckpt']=None
     token=str(uuid.uuid4())
@@ -163,7 +171,7 @@ def training():
     @response.call_on_close
     def process_after_request():
         try:
-            Y_up,Y_down,Y_fused=train_and_infer(img,mask,**infos)
+            Y_up,Y_down,Y_fused=train_and_infer(img,mask,hints=hints,**infos)
             print(np.unique(Y_up))
             sessions[token]={'img':img_path,'mask':mask_path,'infos':infos}
             sessions[token]['time']=time.time()
