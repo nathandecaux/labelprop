@@ -4,11 +4,6 @@
 
 from setuptools import setup, find_packages
 
-with open('README.rst') as readme_file:
-    readme = readme_file.read()
-
-with open('HISTORY.rst') as history_file:
-    history = history_file.read()
 
 requirements = [
 'Flask==2.1.0',
@@ -16,7 +11,7 @@ requirements = [
 'MedPy==0.4.0',
 'monai==0.8.1',
 'nibabel==3.2.1',
-'numpy==1.20.3',
+'numpy',
 'plotext==4.2.0',
 'pytorch_lightning==1.6.3',
 'setuptools==59.5.0',
@@ -43,7 +38,6 @@ setup(
     description="Label propagation using deep registration",
     install_requires=requirements,
     license="MIT license",
-    long_description=readme + '\n\n' + history,
     include_package_data=True,
     keywords='labelprop',
     name='deep-labelprop',

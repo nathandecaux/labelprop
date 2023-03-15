@@ -31,6 +31,7 @@ class LabelProp(pl.LightningModule):
     def __init__(self,n_channels=1,n_classes=2,learning_rate=5e-3,weight_decay=1e-8,way='both',shape=256,selected_slices=None,losses={},by_composition=False,unsupervised=False):
         super().__init__()
         self.n_classes = n_classes
+        self.w_dice=10
         self.learning_rate=learning_rate
         self.weight_decay=weight_decay
         self.selected_slices=selected_slices #Used in validation step 
@@ -134,10 +135,10 @@ class LabelProp(pl.LightningModule):
             # loss_ncc=0.05*self.mssim(moved,target)
             losses['sim']=loss_ncc
         if moved_mask!=None:
-            loss_seg= Dice().loss(moved_mask,target_mask)
+            # loss_seg= Dice().loss(nn.Softmax(1)(moved_mask)[:,1:2],target_mask[:,1:2])
 
-            # loss_seg=DiceLoss(include_background=False,softmax=False)(moved_mask,target_mask)-1
-            losses['seg']=loss_seg
+            loss_seg=DiceLoss(include_background=False,softmax=True)(moved_mask,target_mask)-1
+            losses['seg']=loss_seg*self.w_dice
             # losses['seg']-=0.005*HausdorffERLoss()(moved_mask[:,1:],target_mask[:,1:].long())
         if field!=None:
             # loss_trans=BendingEnergyLoss()(field) #MONAI
@@ -536,7 +537,7 @@ class LabelProp(pl.LightningModule):
             
             if len(dices_prop)>0:
                 dices_prop=-torch.stack(dices_prop).mean()
-                self.log('val_accuracy',dices_prop)
+                self.log('val_accuracy',dices_prop*100/self.w_dice)
                 print('Propagated label mean DICE',dices_prop.detach().cpu().numpy())
             else:
                 self.log('val_accuracy',self.current_epoch)
