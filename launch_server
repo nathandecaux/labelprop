@@ -1,5 +1,34 @@
 #bin/bash
+#Catch arguments -p or --port and -h or --host
+while [[ $# -gt 1 ]]
+do
+key="$1"
+case $key in
+    -p|--port)
+    PORT="$2"
+    shift # past argument
+    ;;
+    -h|--host)
+    HOST="$2"
+    shift # past argument
+    ;;
+    *)
+            # unknown option
+    ;;
+esac
+shift # past argument or value
+done
+
+#Set default values
+if [ -z "$PORT" ]; then
+    PORT=6000
+fi
+if [ -z "$HOST" ]; then
+    HOST=0.0.0.0
+fi
+
+
 export FLASK_APP=api
 export FLASK_ENV=development
 cd labelprop
-flask run --host 0.0.0.0 --port 6000
+flask run --host $HOST --port $PORT

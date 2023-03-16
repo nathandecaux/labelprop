@@ -70,4 +70,4 @@ Basic operations can be done using the command-line interface provided in labelp
 ### GUI
 
 See this [repo](https://github.com/nathandecaux/napari-labelprop)
-![Client-server scheme](client_server_scheme.png)
+![Client-server scheme](client_server_scheme.pdf)
