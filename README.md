@@ -69,5 +69,8 @@ Basic operations can be done using the command-line interface provided in labelp
 
 ### GUI
 
-See this [repo](https://github.com/nathandecaux/napari-labelprop)
-![Client-server scheme](client_server_scheme.pdf)
+See this [repo](https://github.com/nathandecaux/napari-labelprop-remote)
+
+<p align="center">
+  <img src="https://github.com/nathandecaux/labelprop.github.io/raw/main/client_server.drawio.svg" width="600">
+</p>
