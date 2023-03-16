@@ -10,15 +10,17 @@ To install this project with CUDA 11.1 :
     pip install -e .
 
 ## Usage
+
 ### CLI
 
 Basic operations can be done using the command-line interface provided in labelprop.py at the root of the project.
+
 #### Pretraining
-    
+
     $ python labelprop.py pretrain --help
     Usage: labelprop.py pretrain [OPTIONS] IMG_LIST
 
-      Pretrain the model on a list of images. The images are assumed to be
+    Pretrain the model on a list of images. The images are assumed to be
       greyscale nifti files. IMG_LIST is a text file containing line-separated
       paths to the images.
 
@@ -34,7 +36,7 @@ Basic operations can be done using the command-line interface provided in labelp
     $python labelprop.py train --help
     Usage: labelprop.py train [OPTIONS] IMG_PATH MASK_PATH
 
-      Train a model and save the checkpoint and predicted masks. IMG_PATH is a
+    Train a model and save the checkpoint and predicted masks. IMG_PATH is a
       greyscale nifti (.nii.gz or .nii) image, while MASKPATH is it related sparse
       segmentation.
 
@@ -47,12 +49,13 @@ Basic operations can be done using the command-line interface provided in labelp
                                   masks
       -n, --name TEXT             Prefix for the output files (checkpoint and
                                   masks)
- #### Propagating (inference)
- 
+
+#### Propagating (inference)
+
     $python labelprop.py propagate --help
     Usage: labelprop.py propagate [OPTIONS] IMG_PATH MASK_PATH CHECKPOINT
 
-      Propagate labels from sparse segmentation.  IMG_PATH is a greyscale nifti
+    Propagate labels from sparse segmentation.  IMG_PATH is a greyscale nifti
       (.nii.gz or .nii) image, while MASKPATH is it related sparse segmentation.
       CHECKPOINT is the path to the checkpoint (.ckpt) file.
 
@@ -65,6 +68,6 @@ Basic operations can be done using the command-line interface provided in labelp
       -n, --name TEXT             Prefix for the output files (masks)
 
 ### GUI
+
 See this [repo](https://github.com/nathandecaux/napari-labelprop)
-    
-    
+![Client-server scheme](client_server_scheme.png)
