@@ -1,4 +1,4 @@
-# LabelProp
+# LabelProp - CLI and Server
 
 ## Installation
 
