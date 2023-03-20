@@ -1,4 +1,4 @@
-# LabelProp
+# LabelProp - CLI and Server
 
 ## Installation
 
@@ -69,6 +69,8 @@ Basic operations can be done using the command-line interface provided in labelp
 
 ### GUI
 
-See this [repo](https://github.com/nathandecaux/napari-labelprop)
+See this [repo](https://github.com/nathandecaux/napari-labelprop-remote)
 
-![Client-server scheme](https://github.com/nathandecaux/labelprop.github.io/raw/main/client_server.drawio.svg)
+<p align="center">
+  <img src="https://github.com/nathandecaux/labelprop.github.io/raw/main/client_server.drawio.svg" width="600">
+</p>
