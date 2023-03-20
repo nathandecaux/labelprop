@@ -12,6 +12,7 @@ import io
 import hashlib
 import functools
 import logging
+import pathlib
 from copy import deepcopy
 app=Flask(__name__)
 package_path = os.path.dirname(os.path.abspath(__file__))
@@ -21,6 +22,10 @@ checkpoint_dir=server['checkpoint_dir']
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
 
+def check_tmp():
+    """Check if /tmp directory exists, if not create it (watch out for permissions in Windows)"""
+    if not os.path.exists('/tmp'):
+        os.makedirs('/tmp')
 
 @app.route('/get_ckpt_dir',methods=['GET'])
 def get_ckpt_dir():
@@ -72,6 +77,7 @@ def get_tmp_hashed_img():
     List hash from file of /tmp directory
     Hased images are named as "<hash>_img.npy"
     """
+    check_tmp()
     tmp_dir = '/tmp/'
     files = os.listdir(tmp_dir)
     hash_list = [f.split('_img')[0] for f in files if f.endswith('_img.npy')]
@@ -83,6 +89,7 @@ def inference():
     """
     Receive img and mask arrays as string and checkpoint,shape,z_axis,lab parameters and call propagate_from_ckpt. 
     """
+    check_tmp()
     arrays=np.load(request.files['arrays'])
     infos=json.loads(request.files['params'].read())
     if 'hash' in infos.keys():
@@ -141,6 +148,7 @@ def training():
     """
     Receive img and mask arrays as string and checkpoint,shape,z_axis,lab parameters and call propagate_from_ckpt. 
     """
+    check_tmp()
     arrays=np.load(request.files['arrays'])
     infos=json.loads(request.files['params'].read())
     mask=arrays['mask']

@@ -115,3 +115,7 @@ Dockerfile
 cmd.sh
 table.csv
 .xdg/dconf/user
+click
+.gitignore
+os
+.gitignore

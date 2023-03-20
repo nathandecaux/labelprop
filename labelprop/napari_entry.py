@@ -10,10 +10,14 @@ from os.path import join
 import shutil
 import nibabel as ni
 import pathlib
-
+import json
 #Get user home directory
 home=pathlib.Path.home()
-ckpt_dir=join(home,'checkpoints')
+#Get ckpt directory from conf.json
+with open('conf.json','r') as f:
+    conf=json.load(f)
+ckpt_dir=conf['ckpt_dir']
+
 pathlib.Path(ckpt_dir).mkdir(parents=True,exist_ok=True)
 
 def resample(Y,size):
@@ -132,6 +136,7 @@ def pretrain(img_list,shape,z_axis=2,output_dir='~/label_prop_checkpoints',name=
     #     #Save fields
     #     torch.save(fields_up,join(output_dir,f'{name}_up.pt'))
     #     torch.save(fields_down,join(output_dir,f'{name}_down.pt'))
+
 
 def propagate_from_fields(img,mask,fields_up,fields_down,shape,z_axis=2,selected_slices=None,kwargs={}):
     """

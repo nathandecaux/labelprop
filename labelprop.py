@@ -86,9 +86,7 @@ def pretrain(img_list,shape,z_axis,output_dir,name,max_epochs):
 
 #train_dataset(img_list,mask_list,pretrained_ckpt,shape,max_epochs,z_axis=2,output_dir='~/label_prop_checkpoints',name='',**kwargs):
 @cli.command()
-@click.argument('img_mask_list',type=click.File('r')if hints!='':
-            arrays['hints']=hints.data.astype('uint8')if hints!='':
-            arrays['hints']=hints.data.astype('uint8'))#,help='Text file containing line-separated paths to greyscale images (.nii.gz) and comma separated mask paths (.nii.gz)')
+@click.argument('img_mask_list',type=click.File('r'))#,help='Text file containing line-separated paths to greyscale images (.nii.gz) and comma separated mask paths (.nii.gz)')
 @click.option('pretrained_ckpt','-c',type=click.Path(exists=True,dir_okay=False))#,help='Path to the checkpoint (.ckpt)')
 @click.option('--shape','-s', default=256, help='Image size (default: 256)')
 @click.option('--z_axis','-z', default=2, help='Axis along which to propagate (default: 2)')
