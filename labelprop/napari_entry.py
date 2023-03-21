@@ -11,10 +11,16 @@ import shutil
 import nibabel as ni
 import pathlib
 import json
+import sys
+
+#Get package directory
+package_dir=pathlib.Path(__file__).parent.absolute()
+#Add package directory to path
+sys.path.append(str(package_dir))
 #Get user home directory
 home=pathlib.Path.home()
 #Get ckpt directory from conf.json
-with open('conf.json','r') as f:
+with open(join(package_dir,'conf.json'),'r') as f:
     conf=json.load(f)
 ckpt_dir=conf['checkpoint_dir']
 
