@@ -16,7 +16,7 @@ home=pathlib.Path.home()
 #Get ckpt directory from conf.json
 with open('conf.json','r') as f:
     conf=json.load(f)
-ckpt_dir=conf['ckpt_dir']
+ckpt_dir=conf['checkpoint_dir']
 
 pathlib.Path(ckpt_dir).mkdir(parents=True,exist_ok=True)
 
