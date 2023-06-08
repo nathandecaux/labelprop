@@ -7,15 +7,9 @@ from labelprop.napari_entry import pretrain as pretraining
 from labelprop.napari_entry import train_dataset as train_dataset_entry
 
 
-# @click.option('--debug/--no-debug', default=False)
 @click.group()
 def cli():
     pass    # click.echo('Debug mode is %s' % ('on' if debug else 'off'))
-
-
-
-# # def train(img,mask,pretrained_ckpt,shape,max_epochs,z_axis=2,output_dir='~/label_prop_checkpoints',name='',pretraining=False):
-# #     Y_up,Y_down,Y_fused=train_and_infer(img,mask,pretrained_ckpt,shape,max_epochs,z_axis=z_axis,output_dir=output_dir,name=name,pretraining=pretraining)
 
 @cli.command()
 @click.argument('img_path',type=click.Path(exists=True,dir_okay=False))#,help='Path to the greyscale image (.nii.gz)')
@@ -37,8 +31,6 @@ def train(img_path,mask_path,pretrained_ckpt,shape,max_epochs,z_axis,output_dir,
     ni.save(ni.Nifti1Image(Y_down.astype('uint8'),affine),os.path.join(output_dir,name+'_down.nii.gz'))
     ni.save(ni.Nifti1Image(Y_fused.astype('uint8'),affine),os.path.join(output_dir,name+'_fused.nii.gz'))
 
-# def propagate(img,mask,checkpoint,shape=304,z_axis=2,label='all',**kwargs):
-#     Y_up,Y_down,Y_fused=propagate_from_ckpt(img,mask,checkpoint,shape,z_axis,label,**kwargs)
 
 @cli.command()
 @click.argument('img_path',type=click.Path(exists=True,dir_okay=False))#,help='Path to the greyscale image (.nii.gz)')
@@ -61,8 +53,6 @@ def propagate(img_path,mask_path,checkpoint,shape,z_axis,label,output_dir,name):
     ni.save(ni.Nifti1Image(Y_down.astype('uint8'),affine),os.path.join(output_dir,name+'_down.nii.gz'))
     ni.save(ni.Nifti1Image(Y_fused.astype('uint8'),affine),os.path.join(output_dir,name+'_fused.nii.gz'))
 
-# def pretrain(img_list,shape,z_axis=2,output_dir='~/label_prop_checkpoints',name='',max_epochs=100):
-#     pretrain(img_list,shape,z_axis=z_axis,output_dir=output_dir,name=name,max_epochs=max_epochs)
 
 @cli.command()
 @click.argument('img_list',type=click.File('r'))#,help='Text file containing line-separated paths to greyscale images (.nii.gz)')
@@ -84,7 +74,6 @@ def pretrain(img_list,shape,z_axis,output_dir,name,max_epochs):
     pretraining(img_list,shape,z_axis=z_axis,output_dir=output_dir,name=name,max_epochs=max_epochs)
 
 
-#train_dataset(img_list,mask_list,pretrained_ckpt,shape,max_epochs,z_axis=2,output_dir='~/label_prop_checkpoints',name='',**kwargs):
 @cli.command()
 @click.argument('img_mask_list',type=click.File('r'))#,help='Text file containing line-separated paths to greyscale images (.nii.gz) and comma separated mask paths (.nii.gz)')
 @click.option('pretrained_ckpt','-c',type=click.Path(exists=True,dir_okay=False))#,help='Path to the checkpoint (.ckpt)')

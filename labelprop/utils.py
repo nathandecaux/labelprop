@@ -96,6 +96,15 @@ def create_dict(keys,values):
     return new_dict
 
 def get_weights(Y):
+    """
+    Get weights for each slice based on the distance to the closest annotated slice
+
+    Args:
+        Y ([Tensor]): Sparsely annotated volume segmentation
+
+    Returns:
+        [Tensor]: Weights
+    """
     flag=False
     weights=torch.zeros((Y.shape[1]))
     n=0
@@ -113,6 +122,17 @@ def get_weights(Y):
     return (torch.arctan(weights)/3.14+0.5)
 
 def fuse_up_and_down(Y_up,Y_down,weights):
+    """
+    Fuse up and down predictions using weights
+
+    Args:
+        Y_up ([Tensor]): Up predictions
+        Y_down ([Tensor]): Down predictions
+        weights ([Tensor]): Weights
+
+    Returns:
+        [Tensor]: Fused predictions
+    """
     Y=torch.zeros_like(Y_up)
 
     for lab in list(range(Y.shape[0])):#[1:]:
@@ -139,6 +159,18 @@ def fuse_up_and_down(Y_up,Y_down,weights):
     return Y
 
 def get_successive_fields(X,model):
+    """
+    Generate successive fields between slices, in both directions
+
+    Args:
+        X ([Tensor]): Volume
+        model ([type]): Registration model
+
+    Returns:
+        [list]: List of fields in one direction
+        [list]: List of fields in the other direction
+    """
+
     X=X[0]
     device=X.device
     fields_up=[]
@@ -151,6 +183,9 @@ def get_successive_fields(X,model):
     return fields_up,fields_down
 
 def propagate_labels(X,Y,model,model_down=None):
+    """
+    Deprecated
+    """
     Y2=deepcopy(Y)
     model.eval().to('cuda')
     model.freeze()
@@ -194,6 +229,32 @@ class Normalize(torch.nn.Module):
         return x / torch.sum(x, dim=self.dim, keepdim=True)
 
 def propagate_by_composition(X,Y,hints,model,fields=None,criteria='ncc',reduction='none',func=Normalize(2),device='cuda',return_weights=False,patch_size=31,extrapolate=False):
+    """
+    Propagate labels by composition of transformations
+
+    Args:
+        X (torch.Tensor): input volume
+        Y (torch.Tensor): input labels (sparse)
+        hints (torch.Tensor): input hints
+        model (torch.nn.Module): model to use for registration
+        fields (list) (optionnal): list of fields to use for composition (if None, will be computed)
+        criteria ('ncc' or 'distance') (optionnal): criteria to use for weighting. Default is ncc
+        reduction ('none', 'mean' or 'local_mean') (optionnal): reduction method to use for weighting. Default is none
+        func (torch.nn.Module) (optionnal): function to use for normalization. Default is Normalize(2)
+        device (str) (optionnal): device to use. Default is 'cuda'
+        return_weights (bool) (optionnal): whether to return weights. Default is False
+        patch_size (int) (optionnal): patch size to compute NCC. Default is 31 (31x31 px)
+        extrapolate (bool) (optionnal): whether to extrapolate propagation to the whole volume. Default is False
+
+    Returns:
+        torch.Tensor: propagated labels in a single direction
+        torch.Tensor: propagated labels in the other direction
+        torch.Tensor: propagated labels in both directions (fused)
+
+        if return_weights:
+            torch.Tensor: weights used for fusion
+
+    """
     X=X.to(device)
     Y=Y.to('cpu')
     if hints!=None: hints=hints.to('cpu')
@@ -302,140 +363,6 @@ def propagate_by_composition(X,Y,hints,model,fields=None,criteria='ncc',reductio
         return Y_up,Y_down,Y_fused,weights
     else:
         return Y_up,Y_down,Y_fused
-# def propagate_by_composition(X,Y,hints,model,fields=None,criteria='ncc',reduction='none',func=Normalize(2),device='cuda',return_weights=False,patch_size=31,extrapolate=False):
-#     X=X.to(device)
-#     Y=Y.to('cpu')
-#     if hints!=None: hints=hints.to('cpu')
-#     lab_chunks={}
-#     model.eval().to(device)
-#     print(f'Using {criteria} as weighting criteria and {reduction} as reduction method')
-#     if fields==None:
-#         fields_up,fields_down=get_successive_fields(X,model)
-#     else:
-#         fields_up,fields_down=fields
-#     X=X[0].to(device)
-#     fields_up=[f.to(device) for f in fields_up]
-#     fields_down=[f.to(device) for f in fields_down]
-#     Y_up=torch.clone(Y).to('cpu')
-#     Y_down=torch.clone(Y).to('cpu')
-#     n_classes=Y_up.shape[0]
-#     if reduction=='none' and criteria!='distance':
-#         weights=torch.ones((n_classes,Y.shape[1],2,X.shape[-2],X.shape[-1]))*0.5
-#     else:
-#         weights=torch.ones((n_classes,Y.shape[1],2))*0.5
-#     for lab in list(range(n_classes))[1:]:
-#         print('label : ',lab)
-#         chunks=get_chunks(binarize(Y,lab))
-#         print('Chunks : ',chunks)
-#         lab_chunks[lab]=chunks
-#         for chunk in chunks:
-#             for i in list(range(*chunk))[1:]:
-#                 composed_field_up=model.compose_list(fields_up[chunk[0]:i]).to(device)
-#                 composed_field_down=model.compose_list(fields_down[i:chunk[1]][::-1]).to(device)
-#                 Y_up[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[0]].unsqueeze(0).to(device),composed_field_up).cpu().detach()[0]
-#                 Y_down[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[1]].unsqueeze(0).to(device),composed_field_down).cpu().detach()[0]
-#                 if hints!=None:
-#                     Y[lab:lab+1,i][hints[lab:lab+1,i]==0]=Y_up[lab:lab+1,i][hints[lab:lab+1,i]==0]
-#                 if criteria=='ncc':
-                    
-                    
-#                     # w_up=NCC([15,15]).loss(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device),False).cpu().detach()[0,0]
-#                     # w_down=NCC([15,15]).loss(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device),False).cpu().detach()[0,0]
-#                     w_up=-LocalNormalizedCrossCorrelationLoss(2,kernel_size=patch_size,reduction='none')(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device)).cpu().detach()[0,0]#*(chunk[1]-i)
-#                     w_down=-LocalNormalizedCrossCorrelationLoss(2,kernel_size=patch_size,reduction='none')(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device)).cpu().detach()[0,0]#*(i-chunk[0])
-#                     # w_up=torch.nn.MSELoss(reduction='none')(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device)).cpu().detach()[0,0]#*(chunk[1]-i)
-#                     # w_down=torch.nn.MSELoss(reduction='none')(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device)).cpu().detach()[0,0]#*(i-chunk[0])
-#                     # w_up=GlobalMutualInformationLoss()(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device)).cpu().detach()#*(chunk[1]-i)
-#                     # w_down=GlobalMutualInformationLoss()(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device)).cpu().detach()#*(i-chunk[0])
-#                     if reduction=='mean':
-#                         weights[lab,i,0]=w_up.mean()
-#                         weights[lab,i,1]=w_down.mean()
-#                     elif reduction=='local_mean':
-#                         weights[lab,i,0]=w_up[Y_up[lab,i]>0.5].mean()
-#                         weights[lab,i,1]=w_down[Y_down[lab,i]>0.5].mean()
-#                     else:
-#                         weights[lab,i,0]=w_up
-#                         weights[lab,i,1]=w_down
-#                 else:   
-#                     weights[lab,i,1]=torch.tensor(0.5+np.arctan(i-chunk[0]-(chunk[1]-chunk[0])/2)/3.14)#arctan(C(k−(j−i)/2))/π
-#                     weights[lab,i,0]=1-weights[lab,i,1]
-    
-#     if func and criteria != 'distance': weights=func(weights)
-#     if extrapolate:
-#         for lab in list(range(n_classes))[1:]:
-#             chunks=lab_chunks[lab]
-#             start=np.array(chunks).flatten().min()
-#             end=np.array(chunks).flatten().max()
-#             print(lab,start,end)
-#             for i in range(0,start-1):
-#                 weights[:,i,0]=0
-#                 weights[:,i,1]=1
-#                 composed_field_down=model.compose_list(fields_down[i:start][::-1]).to(device)
-#                 Y_down[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,start].unsqueeze(0).to(device),composed_field_down).cpu().detach()[0]
-
-#             for i in range(end+1,len(fields_up)+1):
-#                 weights[:,i,0]=1
-#                 weights[:,i,1]=0
-#                 composed_field_up=model.compose_list(fields_up[end:i]).to(device)
-#                 Y_up[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,end].unsqueeze(0).to(device),composed_field_up).cpu().detach()[0]
-                
-#     Y_up[0]=1-torch.max(Y_up[1:],0)[0]
-#     Y_down[0]=1-torch.max(Y_down[1:],0)[0]
-#     Y_fused=fuse_up_and_down(Y_up,Y_down,weights)
-#     if return_weights:
-#         return Y_up,Y_down,Y_fused,weights
-#     else:
-#         return Y_up,Y_down,Y_fused
-
-# def propagate_with_optimized_weights(X,Y,Y_dense,model):
-
-#     Y_up=torch.clone(Y)
-#     Y_down=torch.clone(Y)
-#     n_classes=Y_up.shape[0]
-#     model.eval().to('cuda')
-#     model.freeze()
-#     fields_up,fields_down=get_successive_fields(X,model)
-#     X=X[0]
-#     # weights=torch.ones((n_classes,Y.shape[1],2,X.shape[-2],X.shape[-1]))*0.5
-#     weights=torch.ones((n_classes,Y.shape[1],2))*0.5
-#     for lab in list(range(n_classes))[1:]:
-#         print('label : ',lab)
-#         chunks=get_chunks(binarize(Y,lab))
-#         #Coucou
-#         print('Chunks : ',chunks)
-        
-#         for chunk in chunks:
-#             for i in list(range(*chunk))[1:]:
-#                 composed_field_up=model.compose_list(fields_up[chunk[0]:i]).to('cuda')
-#                 composed_field_down=model.compose_list(fields_down[i:chunk[1]][::-1]).to('cuda')
-#                 Y_up[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[0]].unsqueeze(0).to('cuda'),composed_field_up).cpu().detach()[0]
-#                 Y_down[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[1]].unsqueeze(0).to('cuda'),composed_field_down).cpu().detach()[0]
-#                 # w_up=NCC([9,9]).loss(model.apply_deform(to_batch(X[chunk[0]],'cuda'),composed_field_up),to_batch(X[i],'cuda'),False).cpu().detach()[0,0]
-#                 # w_down=NCC([9,9]).loss(model.apply_deform(to_batch(X[chunk[1]],'cuda'),composed_field_down),to_batch(X[i],'cuda'),False).cpu().detach()[0,0]
-#                 # weights[lab,i,0]=w_up[Y_up[lab,i]>0.5].mean()
-#                 # weights[lab,i,1]=w_down[Y_down[lab,i]>0.5].mean()
-#                 # w_up=-GlobalMutualInformationLoss()(model.apply_deform(to_batch(X[chunk[0]],'cuda'),composed_field_up),to_batch(X[i],'cuda')).cpu().detach()
-#                 # w_down=-GlobalMutualInformationLoss()(model.apply_deform(to_batch(X[chunk[1]],'cuda'),composed_field_down),to_batch(X[i],'cuda')).cpu().detach()
-#                 # weights[lab,i,0]=w_up
-#                 # weights[lab,i,1]=w_down
-#                 # weights[lab,i,0]=w_up/(w_up+w_down)
-#                 # weights[lab,i,1]=1-weights[lab,i,0]
-#                 weights[lab,i,1]=torch.tensor(0.5+np.arctan(i-chunk[0]-(chunk[1]-chunk[0])/2)/3.14)#arctan(C(k−(j−i)/2))/π
-#                 weights[lab,i,0]=1-weights[lab,i,1]
-#                 # weights[lab,i,0]=torch.nn.MSELoss()(model.apply_deform(to_batch(X[chunk[0]],'cuda'),composed_field_up),to_batch(X[i],'cuda')).cpu().detach()
-#                 # weights[lab,i,1]=torch.nn.MSELoss()(model.apply_deform(to_batch(X[chunk[1]],'cuda'),composed_field_down),to_batch(X[i],'cuda')).cpu().detach()
-#     # weights[1,:,1]=get_weights(Y)
-#     # weights[1,:,0]=1-weights[1,:,1]
-#     # weights=weights.mean(dim=-1).mean(dim=-1)
-#     # raise Exception('weights',weights)
-#     # weights=torch.nn.Softmax(2)(weights)
-#     Y_up[0]=(torch.sum(Y_up[1:],0)<0.5)*1.
-#     Y_down[0]=(torch.sum(Y_down[1:])<0.5)*1.
-#     weights[:,:,0]=optimize_weights(weights,Y_up,Y_down,Y_dense)
-#     weights[:,:,1]=1-weights[:,:,0]
-#     Y_fused=fuse_up_and_down(Y_up,Y_down,weights)
-#     return Y_up,Y_down,Y_fused
-
 
 def complex_propagation(X,Y,model):
     Y_up=torch.clone(Y)
@@ -462,7 +389,6 @@ def complex_propagation(X,Y,model):
 
 def compute_metrics(y_pred,y):
 
-
     if len(torch.unique(y_pred))>1:
         dice=monai.metrics.compute_meandice(y_pred, y, include_background=True)
     else:
@@ -475,11 +401,19 @@ def compute_metrics(y_pred,y):
     #     hauss=torch.sqrt(torch.tensor(y.shape[-1]^2+y.shape[-2]^2))
     #     asd=torch.sqrt(torch.tensor(y.shape[-1]^2+y.shape[-2]^2))
 
-    return dice,torch.zeros(1),torch.zeros(1)#torch.tensor(hauss),torch.tensor(asd)
+    return dice,torch.tensor(hauss),torch.tensor(asd)
 
 
 
 def get_dices(Y_dense,Y,Y2,selected_slices):
+    """Compute dices for each slice of the volume, and for each label.
+
+    Args:
+        Y_dense (torch.Tensor): Dense ground truth segmentation.
+        Y (torch.Tensor): Predicted segmentation in one direction.
+        Y2 (torch.Tensor): Predicted segmentation in the other direction.
+        selected_slices (list): List of index of manually segmented slices that were provided during the inference.
+    """
     weights=get_weights(remove_annotations(deepcopy(Y_dense),selected_slices))
     dices_up=[]
     hauss_up=[]
