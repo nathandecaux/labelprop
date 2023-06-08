@@ -17,7 +17,7 @@ Basic operations can be done using the command-line interface provided in labelp
 
 #### Pretraining
 
-    $ python labelprop.py pretrain --help
+    $ labelprop pretrain --help
     Usage: labelprop.py pretrain [OPTIONS] IMG_LIST
 
     Pretrain the model on a list of images. The images are assumed to be
@@ -33,7 +33,7 @@ Basic operations can be done using the command-line interface provided in labelp
 
 #### Training
 
-    $python labelprop.py train --help
+    $ labelprop train --help
     Usage: labelprop.py train [OPTIONS] IMG_PATH MASK_PATH
 
     Train a model and save the checkpoint and predicted masks. IMG_PATH is a
@@ -52,7 +52,7 @@ Basic operations can be done using the command-line interface provided in labelp
 
 #### Propagating (inference)
 
-    $python labelprop.py propagate --help
+    $ labelprop propagate --help
     Usage: labelprop.py propagate [OPTIONS] IMG_PATH MASK_PATH CHECKPOINT
 
     Propagate labels from sparse segmentation.  IMG_PATH is a greyscale nifti
