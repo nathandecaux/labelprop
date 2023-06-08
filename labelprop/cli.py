@@ -101,7 +101,7 @@ def train_dataset(img_mask_list,pretrained_ckpt,shape,z_axis,output_dir,name,max
 
 @cli.command()
 @click.option('--addr','-a',default='0.0.0.0')
-@click.option('--port','-p',default=5000)
+@click.option('--port','-p',default=6000)
 def launch_server(addr,port):
     #Export FLASK_APP=api and FLASK_ENV=development before running
     os.environ['FLASK_APP']='api'
