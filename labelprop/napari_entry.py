@@ -20,10 +20,13 @@ sys.path.append(str(package_dir))
 #Get user home directory
 home=pathlib.Path.home()
 #Get ckpt directory from conf.json
-with open(join(package_dir,'conf.json'),'r') as f:
-    conf=json.load(f)
-ckpt_dir=conf['checkpoint_dir']
 
+def get_ckpt_dir():
+    with open(join(package_dir,'conf.json'),'r') as f:
+        conf=json.load(f)
+    ckpt_dir=conf['checkpoint_dir']
+    return ckpt_dir
+ckpt_dir=get_ckpt_dir()
 pathlib.Path(ckpt_dir).mkdir(parents=True,exist_ok=True)
 
 def resample(Y,size):
@@ -40,6 +43,7 @@ def propagate_from_ckpt(img,mask,checkpoint,shape=304,z_axis=2,label='all',hints
     """
     Propagate labels using a checkpoint
     """
+    ckpt_dir=get_ckpt_dir()
     shape=int(shape/8)*8
     if str(label)=='0': label='all'
     if isinstance(img,str): img=ni.load(img).get_fdata()
@@ -72,6 +76,8 @@ def train_and_infer(img,mask,pretrained_ckpt,shape,max_epochs,z_axis=2,output_di
     """
     Train a model and propagate provided labels
     """
+    ckpt_dir=get_ckpt_dir()
+
     shape=int(shape/8)*8
 
     way='both'
@@ -198,6 +204,8 @@ def train_dataset(img_list,mask_list,pretrained_ckpt,shape,max_epochs,z_axis=2,o
     """
     Train a model on a list of images
     """
+    ckpt_dir=get_ckpt_dir()
+
     shape=int(shape/8)*8
     shape=(shape,shape)
     way='both'

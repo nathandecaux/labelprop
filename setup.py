@@ -35,6 +35,11 @@ setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
     ],
+    entry_points = {
+        'console_scripts': [
+            'labelprop = labelprop.cli:cli',                  
+        ],              
+    },
     description="Label propagation using deep registration",
     install_requires=requirements,
     license="MIT license",

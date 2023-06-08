@@ -2,9 +2,9 @@ import sys
 import os
 import click
 import nibabel as ni
-from labelprop.napari_entry import propagate_from_ckpt,train_and_infer
-from labelprop.napari_entry import pretrain as pretraining
-from labelprop.napari_entry import train_dataset as train_dataset_entry
+from .napari_entry import propagate_from_ckpt,train_and_infer
+from .napari_entry import pretrain as pretraining
+from .napari_entry import train_dataset as train_dataset_entry
 from subprocess import Popen
 
 @click.group()
@@ -107,7 +107,9 @@ def launch_server(addr,port):
     os.environ['FLASK_APP']='api'
     os.environ['FLASK_ENV']='development'
     os.environ['MKL_SERVICE_FORCE_INTEL']='1'
-    Popen('cd labelprop && flask run --host=%s --port=%d' % (addr,port),shell=True).wait()
+    #Get package path
+    package_path=os.path.dirname(os.path.abspath(__file__))
+    Popen('cd %s && flask run --host=%s --port=%d' % (package_path,addr,port),shell=True).wait()
 
 
     
