@@ -3,7 +3,6 @@ import torch.utils.data as data
 import pytorch_lightning as pl
 import nibabel as ni
 from torch.utils.data import DataLoader, ConcatDataset
-import torchio.transforms as tio
 from torch.nn import functional as func
 import torch
 import numpy as np
@@ -120,7 +119,7 @@ class FullScan(data.Dataset):
         return len(self.Y)
 
     def norm(self, x, z_axis):
-        norm = tio.RescaleIntensity((0, 1))
+        norm = torch.nn.InstanceNorm3d(1)
         if len(x.shape) == 4:
             x = norm(x)
         elif len(x.shape) == 3:
@@ -157,7 +156,7 @@ class UnsupervisedScan(data.Dataset):
         return len(self.X)
 
     def norm(self, x):
-        norm = tio.RescaleIntensity((0, 1))
+        norm = torch.nn.InstanceNorm3d(1)
         if len(x.shape) == 4:
             x = norm(x)
         elif len(x.shape) == 3:

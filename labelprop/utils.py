@@ -6,7 +6,6 @@ import torch.nn.functional as F
 from copy import deepcopy
 import monai
 from copy import copy,deepcopy
-import medpy.metric as med
 from .voxelmorph2d import NCC,SpatialTransformer
 # from .weight_optimizer import optimize_weights
 import plotext as plt
@@ -401,7 +400,7 @@ def compute_metrics(y_pred,y):
     #     hauss=torch.sqrt(torch.tensor(y.shape[-1]^2+y.shape[-2]^2))
     #     asd=torch.sqrt(torch.tensor(y.shape[-1]^2+y.shape[-2]^2))
 
-    return dice,torch.tensor(hauss),torch.tensor(asd)
+    return dice,None,None#torch.tensor(hauss),torch.tensor(asd)
 
 
 

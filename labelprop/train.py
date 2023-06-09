@@ -8,7 +8,6 @@ from copy import deepcopy
 from pytorch_lightning.callbacks import ModelCheckpoint
 import monai
 from copy import copy,deepcopy
-import medpy.metric as med
 from .lightning_model import LabelProp
 from .Pretraining_model import LabelProp as PretrainingModel
 from .voxelmorph2d import NCC,SpatialTransformer,VecInt
@@ -36,7 +35,7 @@ def train_and_eval(datamodule,model_PARAMS,max_epochs,ckpt=None):
     if ckpt!=None:
         model=model.load_from_checkpoint(ckpt,strict=False)
     else:
-        trainer=Trainer(gpus=1,max_epochs=max_epochs,callbacks=checkpoint_callback)
+        trainer=Trainer(accelerator="gpu",max_epochs=max_epochs,callbacks=checkpoint_callback)
         trainer.fit(model,datamodule)
         model=model.load_from_checkpoint(checkpoint_callback.best_model_path)
     datamodule.setup('fit')
@@ -70,11 +69,11 @@ def train(datamodule,model_PARAMS,max_epochs,ckpt=None,pretraining=False,**kwarg
         trained_model=LabelProp.load_from_checkpoint(ckpt,strict=False)
         model.registrator.unet_model.load_state_dict(trained_model.registrator.unet_model.state_dict())
         model.registrator.flow.load_state_dict(trained_model.registrator.flow.state_dict())
-    gpus=1
+    gpus="gpu"
     if 'device' in kwargs:
-        if kwargs['device']=='cpu': gpus=0
+        if kwargs['device']=='cpu': gpus="cpu"
 
-    trainer=Trainer(gpus=gpus,max_epochs=max_epochs,callbacks=checkpoint_callback)
+    trainer=Trainer(accelerator=gpus,max_epochs=max_epochs,callbacks=checkpoint_callback)
     trainer.fit(model,datamodule)
     #model=model.load_from_checkpoint(checkpoint_callback.best_model_path)
     best_ckpt=checkpoint_callback.best_model_path

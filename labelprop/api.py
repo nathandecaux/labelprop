@@ -1,9 +1,6 @@
 from ntpath import join
 from urllib import response
 from flask import Flask,request,Response,send_file
-from flask_apispec import use_kwargs, marshal_with, FlaskApiSpec
-from apispec import APISpec
-from apispec.ext.marshmallow import MarshmallowPlugin
 from .napari_entry import propagate_from_ckpt,train_and_infer
 import os
 import numpy as np
@@ -37,8 +34,6 @@ def get_ckpt_dir():
     return server['checkpoint_dir']
 
 @app.route('/set_ckpt_dir',methods=['POST'])
-@use_kwargs({'ckpt_dir':str})
-@marshal_with(None,code=200)
 def set_ckpt_dir():
     ckpt_dir=request.args['ckpt_dir']
     global checkpoint_dir
@@ -91,8 +86,6 @@ def get_tmp_hashed_img():
     
 
 @app.route('/inference',methods=['POST'])
-@use_kwargs({'arrays':str,'params':str})
-@marshal_with(None,code=200)
 def inference():
     """
     Receive img and mask arrays as string and checkpoint,shape,z_axis,lab parameters and call propagate_from_ckpt. 
@@ -258,27 +251,27 @@ def get_session_list():
     """
     return ','.join(sessions.keys())
 
-docs=FlaskApiSpec(app)
+# docs=FlaskApiSpec(app)
 
-docs.register(training)
-docs.register(list_ckpts)
-docs.register(list_hashes)
-docs.register(send_ckpt)
-docs.register(download_inference)
-docs.register(get_session_info)
-docs.register(get_session_list)
-docs.register(inference)
+# docs.register(training)
+# docs.register(list_ckpts)
+# docs.register(list_hashes)
+# docs.register(send_ckpt)
+# docs.register(download_inference)
+# docs.register(get_session_info)
+# docs.register(get_session_list)
+# docs.register(inference)
 
-app.config.update({
-    'APISPEC_SPEC': APISpec(
-        title='DeepFluorescence',
-        version='v1',
-        plugins=[MarshmallowPlugin()],
-        openapi_version='2.0.0'
-    ),
-    'APISPEC_SWAGGER_URL': '/swagger/',
-    'APISPEC_SWAGGER_UI_URL': '/swagger-ui/'
-})
+# app.config.update({
+#     'APISPEC_SPEC': APISpec(
+#         title='DeepFluorescence',
+#         version='v1',
+#         plugins=[MarshmallowPlugin()],
+#         openapi_version='2.0.0'
+#     ),
+#     'APISPEC_SWAGGER_URL': '/swagger/',
+#     'APISPEC_SWAGGER_UI_URL': '/swagger-ui/'
+# })
 
 
 if __name__=='__main__':

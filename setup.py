@@ -7,15 +7,12 @@ from setuptools import setup, find_packages
 
 requirements = [
 'Flask==2.1.0',
-'kornia==0.6.5',
-'MedPy==0.4.0',
+'kornia==0.6.12',
 'monai==0.8.1',
 'nibabel==3.2.1',
 'numpy',
 'plotext==4.2.0',
-'pytorch_lightning==1.6.3',
-'setuptools==59.5.0',
-'torchio==0.18.47']
+'lightning']
 
 test_requirements = [ ]
 

@@ -63,7 +63,7 @@ def optimize_weights(weights,Y_up,Y_down,Y_true,ckpt=None,learning_rate=1e-5):
     if ckpt is not None:
         model.load_state_dict(torch.load(ckpt))
     else:
-        trainer=Trainer(gpus=1,max_epochs=1)
+        trainer=Trainer(accelerator="gpu",max_epochs=1)
         trainer.fit(model,dl)
     for lab in range(weights.shape[0])[1:]:
         for slc in range(weights.shape[1]):

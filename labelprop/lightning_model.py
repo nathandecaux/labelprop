@@ -76,8 +76,9 @@ class LabelProp(pl.LightningModule):
         Returns:
             Tensor: Transformed image
         """
-        return self.registrator.transformer(x, field)
-
+        x = self.registrator.transformer(x, field)
+        return x
+        
     def compose_list(self, flows):
         flows = list(flows)
         compo = flows[-1]
@@ -155,14 +156,14 @@ class LabelProp(pl.LightningModule):
             # loss_ncc=0.05*self.mssim(moved,target)
             losses["sim"] = loss_ncc
         if moved_mask != None:
-            # loss_seg= 1+Dice().loss(nn.Softmax()(moved_mask),target_mask)
+            loss_seg= Dice().loss(moved_mask,target_mask)
 
-            loss_seg = (
-                DiceLoss(include_background=False, softmax=True)(
-                    moved_mask, target_mask
-                )
-                - 1
-            )
+            # loss_seg = (
+            #     DiceLoss(include_background=False, softmax=True)(
+            #         moved_mask, target_mask
+            #     )
+            #     - 1
+            # )
             losses["seg"] = loss_seg * self.w_dice
             # losses['seg']-=0.005*HausdorffERLoss()(moved_mask[:,1:],target_mask[:,1:].long())
         if field != None:
