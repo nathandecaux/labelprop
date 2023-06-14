@@ -1,12 +1,17 @@
 # LabelProp - CLI and Server
 
+## Requirements
+
+* Python == 3.8.*
+* Pytorch >=1.10
+
 ## Installation
 
 To install this project with CUDA 11.1 :
 
     git clone https://github.com/nathandecaux/labelprop
     cd labelprop
-    pip install torch==1.10.2  --extra-index-url https://download.pytorch.org/whl/cu111
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
     pip install -e .
 
 ## Usage
@@ -74,3 +79,7 @@ See this [repo](https://github.com/nathandecaux/napari-labelprop-remote)
 <p align="center">
   <img src="https://github.com/nathandecaux/labelprop.github.io/raw/main/client_server.drawio.svg" width="600">
 </p>
+
+```
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
