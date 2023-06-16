@@ -17,7 +17,8 @@ requirements = [
 test_requirements = [ ]
 
 dependency_links = []
-
+with open('README.md') as f:
+    readme = f.read()
 setup(
     author="Nathan Decaux",
     author_email='nathan.decaux@imt-atlantique.fr',
@@ -38,6 +39,8 @@ setup(
         ],              
     },
     description="Label propagation using deep registration",
+    
+    long_description = readme,
     install_requires=requirements,
     license="MIT license",
     include_package_data=True,
