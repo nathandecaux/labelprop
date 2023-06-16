@@ -41,6 +41,7 @@ setup(
     description="Label propagation using deep registration",
     
     long_description = readme,
+    long_description_content_type = 'text/markdown',
     install_requires=requirements,
     license="MIT license",
     include_package_data=True,

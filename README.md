@@ -34,7 +34,8 @@ Basic operations can be done using the command-line interface provided in labelp
       -z, --z_axis INTEGER        Axis along which to propagate (default: 2)
       -o, --output_dir DIRECTORY  Output directory for checkpoint
       -n, --name TEXT             Checkpoint name (default : datetime)
-      -e, --max_epochs INTEGER
+      -e, --max_epochs INTEGER    
+
 
 #### Training
 
