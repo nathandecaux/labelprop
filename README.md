@@ -36,7 +36,6 @@ Basic operations can be done using the command-line interface provided in labelp
       -n, --name TEXT             Checkpoint name (default : datetime)
       -e, --max_epochs INTEGER    
 
-
 #### Training
 
     $ labelprop train --help

@@ -22,7 +22,7 @@ with open('README.md') as f:
 setup(
     author="Nathan Decaux",
     author_email='nathan.decaux@imt-atlantique.fr',
-    python_requires='>=3.6',
+    python_requires='>=3.8',
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
@@ -39,7 +39,6 @@ setup(
         ],              
     },
     description="Label propagation using deep registration",
-    
     long_description = readme,
     long_description_content_type = 'text/markdown',
     install_requires=requirements,
@@ -51,6 +50,6 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/nathandecaux/labelprop',
-    version='0.1.0',
+    version='1.1',
     zip_safe=False,
 )
