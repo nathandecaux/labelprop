@@ -47,7 +47,7 @@ setup(
     keywords='labelprop',
     name='deep-labelprop',
     packages=find_packages(include=['labelprop', 'labelprop.*']),
-    # package_data={'': ['conf.json']},
+    package_data={'': ['conf.json']},
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/nathandecaux/labelprop',
