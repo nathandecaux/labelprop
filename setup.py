@@ -6,12 +6,12 @@ from setuptools import setup, find_packages
 
 
 requirements = [
-'Flask==2.1.0',
-'kornia==0.6.12',
-'monai==0.8.1',
-'nibabel==3.2.1',
+'Flask>=2.1.0',
+'kornia>=0.6.12',
+'monai>=0.8.1',
+'nibabel>=3.2.1',
 'numpy',
-'plotext==4.2.0',
+'plotext>=4.2.0',
 'lightning']
 
 test_requirements = [ ]
