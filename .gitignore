@@ -119,3 +119,5 @@ click
 .gitignore
 os
 .gitignore
+labelprop/antsmodel.py
+labelprop/datagen.ipynb

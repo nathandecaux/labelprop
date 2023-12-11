@@ -1,12 +1,26 @@
 import torch
 import torch.utils.data as data
-import pytorch_lightning as pl
+# import pytorch_lightning as pl
+import lightning as pl
 import nibabel as ni
 from torch.utils.data import DataLoader, ConcatDataset
 from torch.nn import functional as func
 import torch
 import numpy as np
 
+
+def to_one_hot(Y, n_labels, dim=1):
+    """
+    One hot encoding of a label tensor
+    Input:
+        Y: label tensor
+        dim: dimension where to apply one hot encoding
+    """
+    #Convert Y to uint8 
+    Y=Y.byte()
+
+    Y = torch.nn.functional.one_hot(Y.long(),num_classes=n_labels).permute(0, dim, *range(1, dim), dim + 1)
+    return Y
 
 class FullScan(data.Dataset):
     def __init__(
@@ -25,7 +39,8 @@ class FullScan(data.Dataset):
         self.hints = hints
         if isinstance(lab, int):
             Y = 1.0 * (Y == lab)
-        self.Y = Y * 1.0
+        self.n_labels=int(Y.max()+1)
+        self.Y = Y.astype("uint8")
         self.X = self.norm(torch.from_numpy(self.X), z_axis)[None, ...]
         self.Y = torch.from_numpy(self.Y)[None, ...]
         if z_axis != 0:
@@ -34,7 +49,8 @@ class FullScan(data.Dataset):
 
         if isinstance(shape, int):
             shape = (shape, shape)
-        self.Y = torch.moveaxis(func.one_hot(self.Y.long()), -1, 1)
+        self.Y = torch.moveaxis(func.one_hot(self.Y.long(),self.n_labels), -1, 1)    
+        # self.Y=to_one_hot(self.Y,self.n_labels,dim=1)    
         self.shape = (self.Y.shape[2], shape[0], shape[1])
         self.X, self.Y = self.resample(self.X, self.Y, self.shape)
         self.Y = (self.Y > 0.5) * 1.0

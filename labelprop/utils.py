@@ -3,6 +3,7 @@ from datetime import datetime
 import torch
 import numpy as np
 import torch.nn.functional as F
+import torchvision.transforms.functional as TF
 from copy import deepcopy
 import monai
 from copy import copy,deepcopy
@@ -12,6 +13,7 @@ import plotext as plt
 from monai.losses import GlobalMutualInformationLoss,LocalNormalizedCrossCorrelationLoss
 from kornia.losses import HausdorffERLoss,SSIMLoss,MS_SSIMLoss
 import json 
+from torch.nn import Sigmoid
 
 class NumpyEncoder(json.JSONEncoder):
     """ Special json encoder for numpy types """
@@ -74,7 +76,10 @@ def get_chunks(Y):
             chunks.append(chunk)
             chunk=[i]
     if len(chunks)==0:
-        return chunk[0]
+        if len(chunk)==0:
+            return None
+        else:
+            chunk[0]
     else:
         return chunks
     
@@ -153,6 +158,7 @@ def fuse_up_and_down(Y_up,Y_down,weights):
             # Y[0,i]+=torch.nn.Sigmoid()(Y[lab:lab+1,i])[0]
     
     Y[0]=1-torch.max(Y[1:],0)[0]
+    # Y[0]=1-torch.mean(Y[1:],0)
     # Y[0]=Y[0]/(Y.shape[0]-1)
     # Y[0][(torch.sum(Y_up[1:],0)==0)*1.]
     return Y
@@ -277,64 +283,67 @@ def propagate_by_composition(X,Y,hints,model,fields=None,criteria='ncc',reductio
     for lab in list(range(n_classes))[1:]:
         print('label : ',lab)
         chunks=get_chunks(binarize(Y,lab))
-        print('Chunks : ',chunks)
-        lab_chunks[lab]=chunks
-        if not isinstance(chunks,int):
-            for chunk in chunks:
-                for i in list(range(*chunk))[1:]:
-                    composed_field_up=model.compose_list(fields_up[chunk[0]:i]).to(device)
-                    composed_field_down=model.compose_list(fields_down[i:chunk[1]][::-1]).to(device)
-                    Y_up[lab:lab+1,i]=model.apply_deform(Y_up[lab:lab+1,i-1].unsqueeze(0).to(device),fields_up[i-1]).cpu().detach()[0]
-                    # Y_down[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[1]].unsqueeze(0).to(device),composed_field_down).cpu().detach()[0]
-                    if hints!=None:
-                        Y_up[lab:lab+1,i][hints[lab:lab+1,i]==1]=1.
-                        Y_up[lab:lab+1,i][hints[-1,i].unsqueeze(0)==1]=0.
-                    if criteria=='ncc':
-                        w_up=-LocalNormalizedCrossCorrelationLoss(2,kernel_size=patch_size,reduction='none')(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device)).cpu().detach()[0,0]#*(chunk[1]-i)
-                        w_down=-LocalNormalizedCrossCorrelationLoss(2,kernel_size=patch_size,reduction='none')(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device)).cpu().detach()[0,0]#*(i-chunk[0])
-                        if reduction=='mean':
-                            weights[lab,i,0]=w_up.mean()
-                            weights[lab,i,1]=w_down.mean()
-                        elif reduction=='local_mean':
-                            weights[lab,i,0]=w_up[Y_up[lab,i]>0.5].mean()
-                            weights[lab,i,1]=w_down[Y_down[lab,i]>0.5].mean()
-                        else:
-                            weights[lab,i,0]=w_up
-                            weights[lab,i,1]=w_down
-                    else:   
-                        weights[lab,i,1]=torch.tensor(0.5+np.arctan(i-chunk[0]-(chunk[1]-chunk[0])/2)/3.14)#arctan(C(k−(j−i)/2))/π
-                        weights[lab,i,0]=1-weights[lab,i,1]
-                for i in list(range(chunk[1],chunk[0],-1))[1:]:
-                    Y_down[lab:lab+1,i]=model.apply_deform(Y_down[lab:lab+1,i+1].unsqueeze(0).to(device),fields_down[i]).cpu().detach()[0]
-                    if hints!=None:
-                        Y_down[lab:lab+1,i][hints[lab:lab+1,i]==1]=1.
-                        Y_down[lab:lab+1,i][hints[-1,i].unsqueeze(0)==1]=0.
-        if hints!=None:
-            #Get first and last slice index of hints
-            hints_idx=[idx for idx in range(hints.shape[1]) if hints[lab,idx].sum()>0]
-            if len(hints_idx)>0:
-                low_hint=hints_idx[0]
-                high_hint=hints_idx[-1]
-                if isinstance(chunks, int):
-                    low_annotation=chunks
-                    high_annotation=chunks
-                else:
-                    low_annotation=chunks[0][0]
-                    high_annotation=chunks[-1][1]
-                if low_annotation>low_hint:
-                    for i in range(low_annotation,low_hint-1,-1)[1:]:
-                        Y_down[lab:lab+1,i]=model.apply_deform(Y_down[lab:lab+1,i+1].unsqueeze(0).to(device),fields_down[i]).cpu().detach()[0]
-                        Y_down[lab:lab+1,i][hints[lab:lab+1,i]==1]=1.
-                        Y_down[lab:lab+1,i][hints[-1,i].unsqueeze(0)==1]=0.
-                        weights[lab,i,1]=1.                
-                        weights[lab,i,0]=0.   
-                if high_annotation<high_hint:
-                    for i in range(high_annotation,high_hint+1)[1:]:
-                        Y_up[lab:lab+1,i]=model.apply_deform(Y_up[lab:lab+1,i-1].unsqueeze(0).to(device),fields_up[i-1]).cpu().detach()[0]
-                        Y_up[lab:lab+1,i][hints[lab:lab+1,i]==1]=1.
-                        Y_up[lab:lab+1,i][hints[-1,i].unsqueeze(0)==1]=0.
-                        weights[lab,i,0]=1.                
-                        weights[lab,i,1]=0.
+
+        if chunks!=None:
+
+            print('Chunks : ',chunks)
+            lab_chunks[lab]=chunks
+            if not isinstance(chunks,int):
+                for chunk in chunks:
+                    for i in list(range(*chunk))[1:]:
+                        composed_field_up=model.compose_list(fields_up[chunk[0]:i]).to(device)
+                        composed_field_down=model.compose_list(fields_down[i:chunk[1]][::-1]).to(device)
+                        Y_up[lab:lab+1,i]=model.apply_deform(Y_up[lab:lab+1,i-1].unsqueeze(0).to(device),fields_up[i-1],ismask=True).cpu().detach()[0]
+                        # Y_down[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,chunk[1]].unsqueeze(0).to(device),composed_field_down).cpu().detach()[0]
+                        if hints!=None:
+                            Y_up[lab:lab+1,i][hints[lab:lab+1,i]==1]=1.
+                            Y_up[lab:lab+1,i][hints[-1,i].unsqueeze(0)==1]=0.
+                        if criteria=='ncc':
+                            w_up=-LocalNormalizedCrossCorrelationLoss(2,kernel_size=patch_size,reduction='none')(model.apply_deform(to_batch(X[chunk[0]],device),composed_field_up),to_batch(X[i],device)).cpu().detach()[0,0]#*(chunk[1]-i)
+                            w_down=-LocalNormalizedCrossCorrelationLoss(2,kernel_size=patch_size,reduction='none')(model.apply_deform(to_batch(X[chunk[1]],device),composed_field_down),to_batch(X[i],device)).cpu().detach()[0,0]#*(i-chunk[0])
+                            if reduction=='mean':
+                                weights[lab,i,0]=w_up.mean()
+                                weights[lab,i,1]=w_down.mean()
+                            elif reduction=='local_mean':
+                                weights[lab,i,0]=w_up[Y_up[lab,i]>0.5].mean()
+                                weights[lab,i,1]=w_down[Y_down[lab,i]>0.5].mean()
+                            else:
+                                weights[lab,i,0]=w_up
+                                weights[lab,i,1]=w_down
+                        else:   
+                            weights[lab,i,1]=torch.tensor(0.5+np.arctan(i-chunk[0]-(chunk[1]-chunk[0])/2)/3.14)#arctan(C(k−(j−i)/2))/π
+                            weights[lab,i,0]=1-weights[lab,i,1]
+                    for i in list(range(chunk[1],chunk[0],-1))[1:]:
+                        Y_down[lab:lab+1,i]=model.apply_deform(Y_down[lab:lab+1,i+1].unsqueeze(0).to(device),fields_down[i],ismask=True).cpu().detach()[0]
+                        if hints!=None:
+                            Y_down[lab:lab+1,i][hints[lab:lab+1,i]==1]=1.
+                            Y_down[lab:lab+1,i][hints[-1,i].unsqueeze(0)==1]=0.
+            if hints!=None:
+                #Get first and last slice index of hints
+                hints_idx=[idx for idx in range(hints.shape[1]) if hints[lab,idx].sum()>0]
+                if len(hints_idx)>0:
+                    low_hint=hints_idx[0]
+                    high_hint=hints_idx[-1]
+                    if isinstance(chunks, int):
+                        low_annotation=chunks
+                        high_annotation=chunks
+                    else:
+                        low_annotation=chunks[0][0]
+                        high_annotation=chunks[-1][1]
+                    if low_annotation>low_hint:
+                        for i in range(low_annotation,low_hint-1,-1)[1:]:
+                            Y_down[lab:lab+1,i]=model.apply_deform(Y_down[lab:lab+1,i+1].unsqueeze(0).to(device),fields_down[i],ismask=True).cpu().detach()[0]
+                            Y_down[lab:lab+1,i][hints[lab:lab+1,i]==1]=1.
+                            Y_down[lab:lab+1,i][hints[-1,i].unsqueeze(0)==1]=0.
+                            weights[lab,i,1]=1.                
+                            weights[lab,i,0]=0.   
+                    if high_annotation<high_hint:
+                        for i in range(high_annotation,high_hint+1)[1:]:
+                            Y_up[lab:lab+1,i]=model.apply_deform(Y_up[lab:lab+1,i-1].unsqueeze(0).to(device),fields_up[i-1],ismask=True).cpu().detach()[0]
+                            Y_up[lab:lab+1,i][hints[lab:lab+1,i]==1]=1.
+                            Y_up[lab:lab+1,i][hints[-1,i].unsqueeze(0)==1]=0.
+                            weights[lab,i,0]=1.                
+                            weights[lab,i,1]=0.
 
     if func and criteria != 'distance': weights=func(weights)
     if extrapolate:
@@ -347,13 +356,13 @@ def propagate_by_composition(X,Y,hints,model,fields=None,criteria='ncc',reductio
                 weights[:,i,0]=0
                 weights[:,i,1]=1
                 composed_field_down=model.compose_list(fields_down[i:start][::-1]).to(device)
-                Y_down[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,start].unsqueeze(0).to(device),composed_field_down).cpu().detach()[0]
+                Y_down[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,start].unsqueeze(0).to(device),composed_field_down,ismask=True).cpu().detach()[0]
 
             for i in range(end+1,len(fields_up)+1):
                 weights[:,i,0]=1
                 weights[:,i,1]=0
                 composed_field_up=model.compose_list(fields_up[end:i]).to(device)
-                Y_up[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,end].unsqueeze(0).to(device),composed_field_up).cpu().detach()[0]
+                Y_up[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,end].unsqueeze(0).to(device),composed_field_up,ismask=True).cpu().detach()[0]
                 
     Y_up[0]=1-torch.max(Y_up[1:],0)[0]
     Y_down[0]=1-torch.max(Y_down[1:],0)[0]
@@ -389,7 +398,7 @@ def complex_propagation(X,Y,model):
 def compute_metrics(y_pred,y):
 
     if len(torch.unique(y_pred))>1:
-        dice=monai.metrics.compute_meandice(y_pred, y, include_background=True)
+        dice=monai.metrics.compute_generalized_dice(y_pred, y, include_background=True)
     else:
         dice=torch.from_numpy(np.array([0.]))
             
@@ -459,3 +468,4 @@ def get_dices(Y_dense,Y,Y2,selected_slices):
     asd_weighted=np.mean(np.array(asd_weighted))
     dices=create_dict(['weights','dice_up','dice_down','dice_sum','dice_weighted','hauss_up','hauss_down','hauss_sum','hauss_weighted','asd_up','asd_down','asd_sum','asd_weighted'],[weights,dice_up,dice_down,dice_sum,dice_weighted,hauss_up,hauss_down,hauss_sum,hauss_weighted,asd_up,asd_down,asd_sum,asd_weighted])
     return dices
+

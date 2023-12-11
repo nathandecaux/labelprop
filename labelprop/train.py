@@ -1,11 +1,13 @@
 
-from pytorch_lightning import Trainer
+# from pytorch_lightning import Trainer
+from lightning import Trainer
 from datetime import datetime
 import torch
 import numpy as np
 import torch.nn.functional as F
 from copy import deepcopy
-from pytorch_lightning.callbacks import ModelCheckpoint
+# from pytorch_lightning.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint
 import monai
 from copy import copy,deepcopy
 from .lightning_model import LabelProp
@@ -33,7 +35,10 @@ def train_and_eval(datamodule,model_PARAMS,max_epochs,ckpt=None):
     )
     model=LabelProp(**model_PARAMS)
     if ckpt!=None:
-        model=model.load_from_checkpoint(ckpt,strict=False)
+        trained_model=model.load_from_checkpoint(ckpt,strict=False)
+        #Create a new flow model that matches shape of the new data
+        trained_model.registrator.flow=model.registrator.flow
+        model=trained_model
     else:
         trainer=Trainer(accelerator="gpu",max_epochs=max_epochs,callbacks=checkpoint_callback)
         trainer.fit(model,datamodule)
@@ -62,13 +67,18 @@ def train(datamodule,model_PARAMS,max_epochs,ckpt=None,pretraining=False,**kwarg
         save_top_k=1,
         mode='max',
     )
-  
+    print(model_PARAMS)
     model=LabelProp(**model_PARAMS)
     if ckpt!=None:
-        #Load weights from checkpoint only for model.registrator.unet_model and model.registrator.flow
         trained_model=LabelProp.load_from_checkpoint(ckpt,strict=False)
+        # #Create a new flow model that matches shape of the new data
+        # trained_model.registrator.flow=model.registrator.flow        
+
         model.registrator.unet_model.load_state_dict(trained_model.registrator.unet_model.state_dict())
         model.registrator.flow.load_state_dict(trained_model.registrator.flow.state_dict())
+        # if 'CRF' in trained_model.__dict__:
+        #     model.CRF=trained_model.CRF
+        # model=trained_model
     gpus="gpu"
     if 'device' in kwargs:
         if kwargs['device']=='cpu': gpus="cpu"
@@ -82,8 +92,14 @@ def train(datamodule,model_PARAMS,max_epochs,ckpt=None,pretraining=False,**kwarg
 def inference(datamodule,model_PARAMS,ckpt,**kwargs):
     model=LabelProp(**model_PARAMS)
     trained_model=LabelProp.load_from_checkpoint(ckpt,strict=False)
+    #Create a new flow model that matches shape of the new data
+    # trained_model.registrator.flow=model.registrator.flow
+    print(trained_model.registrator.state_dict())
     model.registrator.unet_model.load_state_dict(trained_model.registrator.unet_model.state_dict())
     model.registrator.flow.load_state_dict(trained_model.registrator.flow.state_dict())
+    # if 'CRF' in trained_model.__dict__:
+    #     model.CRF=trained_model.CRF
+    # model=trained_model
     datamodule.setup('fit')
     tensors=datamodule.train_dataloader().dataset[0]
     X=tensors[0]

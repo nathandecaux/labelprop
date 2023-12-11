@@ -1,10 +1,15 @@
 import torch
 import torch.nn.functional as F
-import pytorch_lightning as pl
+# import pytorch_lightning as pl
+import lightning as pl
 import kornia
 from .voxelmorph2d import VxmDense,NCC,Grad,Dice
 from pprint import pprint
-from monai.metrics import compute_meandice
+from monai.metrics import compute_generalized_dice
+
+from crfseg import CRF
+
+
 class LabelProp(pl.LightningModule):
 
     @property
@@ -36,10 +41,11 @@ class LabelProp(pl.LightningModule):
         self.by_composition=by_composition
         self.delta=1
         self.mean_dice=0
+        self.CRF=CRF(2)
         print('Losses',losses)
         self.save_hyperparameters()
 
-    def apply_deform(self,x,field):
+    def apply_deform(self,x,field,ismask=False):
         """Apply deformation to x from flow field
         Args:
             x (Tensor): Image or mask to deform (BxCxHxW)
@@ -47,7 +53,10 @@ class LabelProp(pl.LightningModule):
         Returns:
             Tensor: Transformed image
         """        
-        return self.registrator.transformer(x,field)
+        x_hat = self.registrator.transformer(x,field)
+        # if ismask:
+        #     x_hat=self.CRF(x_hat)
+        return x_hat
     
     def compose_list(self,flows):
         flows=list(flows)
@@ -183,7 +192,7 @@ class LabelProp(pl.LightningModule):
                 up_idx=chunk[1]
             if i<chunk[1]:
                 composed_field_up=self.compose_list(fields_up[i:up_idx])
-                prop_y_up=self.apply_deform(moving_y,composed_field_up)
+                prop_y_up=self.apply_deform(moving_y,composed_field_up,True)
                 prop_x_up=self.apply_deform(moving_x,composed_field_up)
                 # prop_y_up=self.apply_successive_transformations(moving_y,fields_up[i:up_idx])
                 # prop_x_up=self.apply_successive_transformations(moving_x,fields_up[i:up_idx])
@@ -202,7 +211,7 @@ class LabelProp(pl.LightningModule):
                     down_idx=chunk[0]
 
                 composed_field_down=self.compose_list(fields_down[down_idx:i][::-1])
-                prop_y_down=self.apply_deform(moving_y,composed_field_down)
+                prop_y_down=self.apply_deform(moving_y,composed_field_down,True)
                 prop_x_down=self.apply_deform(moving_x,composed_field_down)
                 # prop_y_down=self.apply_successive_transformations(moving_y,fields_down[down_idx:i][::-1])
                 # prop_x_down=self.apply_successive_transformations(moving_x,fields_down[down_idx:i][::-1])

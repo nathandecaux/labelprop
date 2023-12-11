@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
-from monai.networks.nets import UNet,Classifier,DenseNet,BasicUNet,DynUNet
+from monai.networks.nets import UNet,Classifier,DenseNet,SwinUNETR,DynUNet,AttentionUnet
 import numpy as np
 import math
 from kornia.geometry.transform import get_perspective_transform,get_affine_matrix2d
@@ -61,8 +61,18 @@ class VxmDense(nn.Module):
         # )
         filters=  [16, 32, 32, 32]
         #DynUNet(spatial_dims, in_channels, out_channels, kernel_size, strides, upsample_kernel_size, filters=None, dropout=None, norm_name=('INSTANCE', {'affine': True}), act_name=('leakyrelu', {'inplace': True, 'negative_slope': 0.01}), deep_supervision=False, deep_supr_num=1, res_block=False, trans_bias=False)
-        # self.unet_model=DynUNet(2,2,2,(3,3,3,3),(1,2,2,2),(3,3,3,3))
+        # self.unet_model=UNet(src_feats*2,trg_feats*2,16,filters,strides=(len(filters)-1)*[2],num_res_units=(len(filters)-2))
         self.unet_model=UNet(src_feats*2,trg_feats*2,16,filters,strides=(len(filters)-1)*[2],num_res_units=(len(filters)-2))
+
+        # self.unet_model=DynUNet(2,src_feats*2,trg_feats*2,(len(filters))*[(3,3)],strides=(len(filters))*[2],upsample_kernel_size=(len(filters)-1)*[(3,3)])
+        # self.unet_model=AttentionUnet(2,src_feats*2,16,channels=filters,strides=(len(filters)-1)*[2],dropout=0.1)
+        # self.unet_model=SwinUNETR(
+        #     in_channels=src_feats*2,
+        #     out_channels=trg_feats*2,
+        #     img_size=inshape,
+        #     feature_size=24,
+        #     spatial_dims=2,
+        # )
         # self.unet_model=BasicUNet(2,src_feats*2,2,features=filters,upsample='nontrainable')
         # self.unet_model=MultiLevelNet(inshape=inshape,levels=sub_levels)
         # self.unet_model=MLNet(inshape=inshape,levels=sub_levels)

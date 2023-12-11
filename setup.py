@@ -8,7 +8,7 @@ from setuptools import setup, find_packages
 requirements = [
 'Flask>=2.1.0',
 'kornia>=0.6.12',
-'monai<=1.1',
+'monai>=1.1',
 'nibabel>=3.2.1',
 'numpy',
 'plotext>=4.2.0',

@@ -1,7 +1,8 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-import pytorch_lightning as pl
+# import pytorch_lightning as pl
+import lightning as pl
 import kornia
 from .voxelmorph2d import VxmDense, NCC, Grad, Dice
 from monai.losses import (
@@ -17,6 +18,7 @@ from copy import deepcopy
 from datetime import datetime
 import os
 import json
+from crfseg import CRF
 
 
 class LabelProp(pl.LightningModule):
@@ -37,7 +39,7 @@ class LabelProp(pl.LightningModule):
         self,
         n_channels=1,
         n_classes=2,
-        learning_rate=5e-3,
+        learning_rate=5e-4,
         weight_decay=1e-8,
         way="both",
         shape=256,
@@ -58,6 +60,7 @@ class LabelProp(pl.LightningModule):
         self.way = way  # If up, learning only "forward" transitions (phi_i->j with j>i). Other choices : "down", "both". Bet you understood ;)
         self.by_composition = by_composition
         self.unsupervised = unsupervised
+        self.CRF=CRF(2)
         # self.loss_model = MTL_loss(['sim','seg','comp','smooth'])
         self.losses = losses
         if self.by_composition:
@@ -68,16 +71,18 @@ class LabelProp(pl.LightningModule):
         print("Losses", losses)
         self.save_hyperparameters()
 
-    def apply_deform(self, x, field):
+    def apply_deform(self,x,field,ismask=False):
         """Apply deformation to x from flow field
         Args:
             x (Tensor): Image or mask to deform (BxCxHxW)
             field (Tensor): Deformation field (Bx2xHxW)
         Returns:
             Tensor: Transformed image
-        """
-        x = self.registrator.transformer(x, field)
-        return x
+        """        
+        x_hat = self.registrator.transformer(x,field)
+        # if ismask:
+        #     x_hat=self.CRF(x_hat)
+        return x_hat
         
     def compose_list(self, flows):
         flows = list(flows)
@@ -169,7 +174,7 @@ class LabelProp(pl.LightningModule):
         if field != None:
             # loss_trans=BendingEnergyLoss()(field) #MONAI
             loss_trans = Grad().loss(field, field)
-            losses["smooth"] = loss_trans
+            losses["smooth"] = 1*loss_trans
         # Return dict of losses
         return losses  # {'sim': loss_ncc,'seg':loss_seg,'smooth':loss_trans}
 
@@ -366,7 +371,7 @@ class LabelProp(pl.LightningModule):
                             else:
                                 for i, field_up in enumerate(fields_up):
                                     prop_x_up = self.apply_deform(prop_x_up, field_up)
-                                    prop_y_up = self.apply_deform(prop_y_up, field_up)
+                                    prop_y_up = self.apply_deform(prop_y_up, field_up, ismask=True)
                                     if with_hints:
                                         if hints[:, 0, chunk[0] + i + 1].sum() > 0:
                                             tp_bkg = (
@@ -423,8 +428,7 @@ class LabelProp(pl.LightningModule):
                                         prop_x_down, field_down
                                     )
                                     prop_y_down = self.apply_deform(
-                                        prop_y_down, field_down
-                                    )
+                                        prop_y_down, field_down, ismask=True)
                                     # losses['contours']+=self.compute_contour_loss(X[:,:,chunk[1]-i],prop_y_down)
                                     if with_hints:
                                         if hints[:, 0, chunk[1] - i].sum() > 0:
@@ -568,7 +572,7 @@ class LabelProp(pl.LightningModule):
                             prop_x_down = X[:, :, low_annotation, ...]
                             i = low_annotation - 1
                             for field_down in fields_down:
-                                prop_y_down = self.apply_deform(prop_y_down, field_down)
+                                prop_y_down = self.apply_deform(prop_y_down, field_down, ismask=True)
                                 prop_x_down = self.apply_deform(prop_x_down, field_down)
                                 if hints[:, 0, i].sum() > 0:
                                     tp_bkg = (
@@ -633,7 +637,7 @@ class LabelProp(pl.LightningModule):
                             prop_x_up = X[:, :, high_annotation, ...]
                             i = high_annotation
                             for field_up in fields_up:
-                                prop_y_up = self.apply_deform(prop_y_up, field_up)
+                                prop_y_up = self.apply_deform(prop_y_up, field_up, ismask=True)
                                 if hints[:, 0, i + 1].sum() > 0:
                                     tp_bkg = (
                                         prop_y_up[:, 0] * hints[:, 0, i + 1]

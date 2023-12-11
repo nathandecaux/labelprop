@@ -77,7 +77,9 @@ def train_and_infer(img,mask,pretrained_ckpt,shape,max_epochs,z_axis=2,output_di
     Train a model and propagate provided labels
     """
     ckpt_dir=get_ckpt_dir()
-
+    
+    #Check if shape is tuple
+    
     shape=int(shape/8)*8
 
     way='both'
@@ -89,7 +91,6 @@ def train_and_infer(img,mask,pretrained_ckpt,shape,max_epochs,z_axis=2,output_di
     if isinstance(mask,str): mask=ni.load(mask).get_fdata()
     if isinstance(hints, str) : hints=ni.load(hints).get_fdata()
     true_shape=img.shape
-    shape=(shape,shape)
     n_classes=len(np.unique(mask))
     losses={'compo-reg-up':True,'compo-reg-down':True,'compo-dice-up':True,'compo-dice-down':True,'bidir-cons-reg':False,'bidir-cons-dice':False}
     model_PARAMS={'n_classes':n_classes,'way':way,'shape':shape,'selected_slices':None,'losses':losses,'by_composition':False,'unsupervised':pretraining}

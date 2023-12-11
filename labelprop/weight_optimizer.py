@@ -6,7 +6,8 @@ import kornia
 from .voxelmorph2d import VxmDense,NCC,Grad,Dice
 from monai.losses import BendingEnergyLoss,GlobalMutualInformationLoss,DiceLoss,LocalNormalizedCrossCorrelationLoss
 from kornia.filters import sobel, gaussian_blur2d,canny,spatial_gradient
-from pytorch_lightning import Trainer
+# from pytorch_lightning import Trainer
+from lightning import Trainer
 from torch.utils.data import DataLoader
 
 

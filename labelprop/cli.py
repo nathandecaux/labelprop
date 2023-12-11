@@ -6,6 +6,7 @@ from .napari_entry import propagate_from_ckpt,train_and_infer
 from .napari_entry import pretrain as pretraining
 from .napari_entry import train_dataset as train_dataset_entry
 from subprocess import Popen
+import pandas as pd
 
 @click.group()
 def cli():
@@ -66,9 +67,13 @@ def pretrain(img_list,shape,z_axis,output_dir,name,max_epochs):
     Pretrain the model on a list of images. The images are assumed to be greyscale nifti files. IMG_LIST is a text file containing line-separated paths to the images.
     """
     #Convert csv to list of paths
-    img_list=img_list.read().splitlines()
+    img_list_df=pd.read_csv(img_list,header=None,names=['path'])
+    img_list=img_list_df['path'].tolist()
+
     #Check if files in list exist
     for img_path in img_list:
+        img_path=img_path.strip()
+        print(img_path.split(),os.path.exists(img_path))
         if not os.path.exists(img_path):
             raise ValueError('File %s does not exist' % img_path)
     pretraining(img_list,shape,z_axis=z_axis,output_dir=output_dir,name=name,max_epochs=max_epochs)
