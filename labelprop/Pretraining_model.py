@@ -7,7 +7,6 @@ from .voxelmorph2d import VxmDense,NCC,Grad,Dice
 from pprint import pprint
 from monai.metrics import compute_generalized_dice
 
-from crfseg import CRF
 
 
 class LabelProp(pl.LightningModule):
@@ -41,7 +40,6 @@ class LabelProp(pl.LightningModule):
         self.by_composition=by_composition
         self.delta=1
         self.mean_dice=0
-        self.CRF=CRF(2)
         print('Losses',losses)
         self.save_hyperparameters()
 

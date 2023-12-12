@@ -18,7 +18,6 @@ from copy import deepcopy
 from datetime import datetime
 import os
 import json
-from crfseg import CRF
 
 
 class LabelProp(pl.LightningModule):
@@ -60,7 +59,6 @@ class LabelProp(pl.LightningModule):
         self.way = way  # If up, learning only "forward" transitions (phi_i->j with j>i). Other choices : "down", "both". Bet you understood ;)
         self.by_composition = by_composition
         self.unsupervised = unsupervised
-        self.CRF=CRF(2)
         # self.loss_model = MTL_loss(['sim','seg','comp','smooth'])
         self.losses = losses
         if self.by_composition:
