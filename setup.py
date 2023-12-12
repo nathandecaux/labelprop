@@ -12,7 +12,9 @@ requirements = [
 'nibabel>=3.2.1',
 'numpy',
 'plotext>=4.2.0',
-'lightning']
+'lightning',
+'torchvision'
+]
 
 test_requirements = [ ]
 
