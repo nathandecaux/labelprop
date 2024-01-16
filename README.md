@@ -1,9 +1,28 @@
 # LabelProp - CLI and Server
 
-## Requirements
 
-* Python >= 3.8.*
-* Pytorch >=1.10
+[![License](https://img.shields.io/pypi/l/deep-labelprop.svg?color=green)](https://github.com/nathandecaux/labelprop/raw/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/deep-labelprop.svg?color=green)](https://pypi.org/project/deep-labelprop)
+[![Python Version](https://img.shields.io/pypi/pyversions/deep-labelprop.svg?color=green)](https://python.org)
+
+
+3D semi-automatic segmentation using deep registration-based 2D label propagation
+---------------------------------------------------------------------------------
+---
+
+Check [napari-labelprop](https://github.com/nathandecaux/napari-labelprop) plugin for use in the napari viewer. 
+See also the [napari-labelprop-remote](https://github.com/nathandecaux/napari-labelprop-remote) plugin for remote computing.
+
+---------------------------------------------------------------------------------
+---
+## About
+
+See "Semi-automatic muscle segmentation in MR images using deep registration-based label propagation" paper : 
+
+[[Paper]![Paper](https://www.integrad.nl/assets/uploads/2016/02/cta-elsevier_logo-no_bg.png)](https://www.sciencedirect.com/science/article/pii/S0031320323002297?casa_token=r5FPBVXYXX4AAAAA:mStyUXb0i4lGqBmfF1j5fV1T9FuCMrpYfwh3lwQve2XAnzUBPZviAiFgMtH7lv6hdcWsA7yM) [[PDF]![PDF](https://www.ouvrirlascience.fr/wp-content/uploads/2018/12/HAL-3.png)](https://hal.science/hal-03945559/document)
+<p>
+  <img src="https://github.com/nathandecaux/labelprop.github.io/raw/main/demo_cut.gif" width="600">
+</p>
 
 ## Installation
 
