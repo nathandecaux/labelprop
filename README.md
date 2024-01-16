@@ -1,5 +1,4 @@
-# LabelProp - CLI and Server
-
+# LabelProp - LabelProp: A semi-automatic segmentation tool for 3D medical images
 
 [![License](https://img.shields.io/pypi/l/deep-labelprop.svg?color=green)](https://github.com/nathandecaux/labelprop/raw/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/deep-labelprop.svg?color=green)](https://pypi.org/project/deep-labelprop)
@@ -96,7 +95,7 @@ Basic operations can be done using the command-line interface provided in labelp
 
 ### GUI
 
-See this [repo](https://github.com/nathandecaux/napari-labelprop-remote)
+See this [repo](https://github.com/nathandecaux/napari-labelprop)
 
 <p align="center">
   <img src="https://github.com/nathandecaux/labelprop.github.io/raw/main/client_server.drawio.svg" width="600">
