@@ -95,12 +95,11 @@ Basic operations can be done using the command-line interface provided in labelp
 
 ### GUI
 
-See this [repo](https://github.com/nathandecaux/napari-labelprop)
+See this [repo](https://github.com/nathandecaux/napari-labelprop) to use labelprop main functions in Napari 
+(See also [napari-labelprop-remote](https://github.com/nathandecaux/napari-labelprop-remote) to run labelprop in a separate process, locally or remotely).
 
 <p align="center">
   <img src="https://github.com/nathandecaux/labelprop.github.io/raw/main/client_server.drawio.svg" width="600">
 </p>
 
-```
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-```
+
