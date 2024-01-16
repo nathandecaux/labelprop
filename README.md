@@ -1,4 +1,4 @@
-# LabelProp - LabelProp: A semi-automatic segmentation tool for 3D medical images
+# LabelProp : A semi-automatic segmentation tool for 3D medical images
 
 [![License](https://img.shields.io/pypi/l/deep-labelprop.svg?color=green)](https://github.com/nathandecaux/labelprop/raw/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/deep-labelprop.svg?color=green)](https://pypi.org/project/deep-labelprop)
