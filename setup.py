@@ -13,7 +13,8 @@ requirements = [
 'numpy',
 'plotext>=4.2.0',
 'lightning',
-'torchvision'
+'torchvision',
+'pandas'
 ]
 
 test_requirements = [ ]
