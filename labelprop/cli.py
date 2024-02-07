@@ -15,6 +15,7 @@ def cli():
 @cli.command()
 @click.argument('img_path',type=click.Path(exists=True,dir_okay=False))#,help='Path to the greyscale image (.nii.gz)')
 @click.argument('mask_path',type=click.Path(exists=True,dir_okay=False))#,help='Path to the mask image (.nii.gz)')
+@click.option('--hints','-h',type=click.Path(exists=True,dir_okay=False),default=None,help='Path to the hints image (.nii.gz)')
 @click.option('--shape','-s', default=256, help='Image size (default: 256)')
 @click.option('--pretrained_ckpt','-c',type=click.Path(exists=True,dir_okay=False), default=None, help='Path to the pretrained checkpoint (.ckpt)')
 @click.option('--max_epochs','-e', default=100)
@@ -27,7 +28,7 @@ def train(img_path,mask_path,pretrained_ckpt,shape,max_epochs,z_axis,output_dir,
     IMG_PATH is a greyscale nifti (.nii.gz or .nii) image, while MASKPATH is it related sparse segmentation.
     """
     affine=ni.load(img_path).affine
-    Y_up,Y_down,Y_fused=train_and_infer(img_path,mask_path,pretrained_ckpt,shape,max_epochs,z_axis=z_axis,output_dir=output_dir,name=name,pretraining=False)
+    Y_up,Y_down,Y_fused=train_and_infer(img_path,mask_path,pretrained_ckpt,shape,max_epochs,z_axis=z_axis,output_dir=output_dir,name=name,pretraining=False,hints=hints)
     ni.save(ni.Nifti1Image(Y_up.astype('uint8'),affine),os.path.join(output_dir,name+'_up.nii.gz'))
     ni.save(ni.Nifti1Image(Y_down.astype('uint8'),affine),os.path.join(output_dir,name+'_down.nii.gz'))
     ni.save(ni.Nifti1Image(Y_fused.astype('uint8'),affine),os.path.join(output_dir,name+'_fused.nii.gz'))
@@ -37,19 +38,20 @@ def train(img_path,mask_path,pretrained_ckpt,shape,max_epochs,z_axis,output_dir,
 @click.argument('img_path',type=click.Path(exists=True,dir_okay=False))#,help='Path to the greyscale image (.nii.gz)')
 @click.argument('mask_path',type=click.Path(exists=True,dir_okay=False))#,help='Path to the mask image (.nii.gz)')
 @click.argument('checkpoint',type=click.Path(exists=True,dir_okay=False))#,help='Path to the checkpoint (.ckpt)')
+@click.option('--hints','-h',type=click.Path(exists=True,dir_okay=False),default=None,help='Path to the hints image (.nii.gz)')
 @click.option('--shape','-s', default=256, help='Image size (default: 256)')
 @click.option('--z_axis','-z', default=2, help='Axis along which to propagate (default: 2)')
 @click.option('--label','-l', default=0, help='Label to propagate (default: 0 = all)')
 @click.option('--output_dir','-o', type=click.Path(exists=True,file_okay=False),default='~/label_prop_checkpoints',help='Output directory for predicted masks (up, down and fused)')
 @click.option('--name','-n', default='',help='Prefix for the output files (masks)')
-def propagate(img_path,mask_path,checkpoint,shape,z_axis,label,output_dir,name):
+def propagate(img_path,mask_path,checkpoint,hints,shape,z_axis,label,output_dir,name):
     """
         Propagate labels from sparse segmentation. 
         IMG_PATH is a greyscale nifti (.nii.gz or .nii) image, while MASKPATH is it related sparse segmentation.
         CHECKPOINT is the path to the checkpoint (.ckpt) file.
     """
     affine=ni.load(img_path).affine
-    Y_up,Y_down,Y_fused=propagate_from_ckpt(img_path,mask_path,checkpoint,shape,z_axis,label)
+    Y_up,Y_down,Y_fused=propagate_from_ckpt(img_path,mask_path,checkpoint,shape,z_axis,label,hints=hints)
     ni.save(ni.Nifti1Image(Y_up.astype('uint8'),affine),os.path.join(output_dir,name+'_up.nii.gz'))
     ni.save(ni.Nifti1Image(Y_down.astype('uint8'),affine),os.path.join(output_dir,name+'_down.nii.gz'))
     ni.save(ni.Nifti1Image(Y_fused.astype('uint8'),affine),os.path.join(output_dir,name+'_fused.nii.gz'))
@@ -81,7 +83,7 @@ def pretrain(img_list,shape,z_axis,output_dir,name,max_epochs):
 
 @cli.command()
 @click.argument('img_mask_list',type=click.File('r'))#,help='Text file containing line-separated paths to greyscale images (.nii.gz) and comma separated mask paths (.nii.gz)')
-@click.option('pretrained_ckpt','-c',type=click.Path(exists=True,dir_okay=False))#,help='Path to the checkpoint (.ckpt)')
+@click.option('pretrained_ckpt','-c',type=click.Path(exists=True,dir_okay=False),help='Path to the pretrained checkpoint (.ckpt)')#,help='Path to the checkpoint (.ckpt)')
 @click.option('--shape','-s', default=256, help='Image size (default: 256)')
 @click.option('--z_axis','-z', default=2, help='Axis along which to propagate (default: 2)')
 @click.option('--output_dir','-o', type=click.Path(exists=True,file_okay=False),default='~/label_prop_checkpoints',help='Output directory for checkpoint')

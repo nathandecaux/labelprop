@@ -27,8 +27,11 @@ def check_tmp():
     if not os.path.exists('/tmp'):
         os.makedirs('/tmp')
 
-@app.route('/get_ckpt_dir',methods=['GET'])
+@app.route('/check',methods=['GET'])
+def check():
+    return 'Hello World!'
 
+@app.route('/get_ckpt_dir',methods=['GET'])
 def get_ckpt_dir():
     server=json.load(fp=open(os.path.join(package_path,'conf.json')))
     return server['checkpoint_dir']

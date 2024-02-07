@@ -37,11 +37,24 @@ or to get the development version :
 
 ## Usage
 
+### Data
+Labelprop operates semi-automatically, in an intra-subject mode, and can therefore be used with a single scan. 
+The scan must be a gray intensity volume, dimension 3 (LHW). Manual annotations must be supplied in an unsigned integer file of the same size, where each voxel value corresponds to the label class (0 as background). 
+
+Most MRI scans are isotropic on one plane only, due to the thickness of the slice. Manual annotations must be provided in the isotropic plane. Propagation is therefore performed in the 3rd dimension (to be indicated with z_axis).
+
 ### CLI
 
 Basic operations can be done using the command-line interface provided in labelprop.py at the root of the project.
 
+
 #### Pretraining
+
+Although Labelprop works on a single scan, it is preferable to pre-train the model on a dataset, with or without manual annotations. 
+
+  ##### Self-supervised
+    
+  To pretrain the model without using any manual annotations :
 
     $ labelprop pretrain --help
     Usage: labelprop.py pretrain [OPTIONS] IMG_LIST
@@ -57,6 +70,27 @@ Basic operations can be done using the command-line interface provided in labelp
       -n, --name TEXT             Checkpoint name (default : datetime)
       -e, --max_epochs INTEGER    
 
+  In this case, the model simply learns to register successive sections with each other, without any anatomical constraints on propagation. 
+
+  ##### With annotations
+
+  Now, to train the model with sparse manual annotations :
+
+    $ labelprop train-dataset --help
+    Usage: labelprop train-dataset [OPTIONS] IMG_MASK_LIST
+
+      Train the model on a full dataset. The images are assumed to be greyscale
+      nifti files. Text file containing line-separated paths to greyscale images
+      and comma separated associated mask paths
+
+    Options:
+      -c FILE                     Path to the pretrained checkpoint (.ckpt)
+      -s, --shape INTEGER         Image size (default: 256)
+      -z, --z_axis INTEGER        Axis along which to propagate (default: 2)
+      -o, --output_dir DIRECTORY  Output directory for checkpoint
+      -n, --name TEXT             Checkpoint name (default : datetime)
+      -e, --max_epochs INTEGER
+      --help                      Show this message and exit.
 #### Training
 
     $ labelprop train --help

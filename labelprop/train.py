@@ -67,7 +67,6 @@ def train(datamodule,model_PARAMS,max_epochs,ckpt=None,pretraining=False,**kwarg
         save_top_k=1,
         mode='max',
     )
-    print(model_PARAMS)
     model=LabelProp(**model_PARAMS)
     if ckpt!=None:
         trained_model=LabelProp.load_from_checkpoint(ckpt,strict=False)
@@ -94,7 +93,6 @@ def inference(datamodule,model_PARAMS,ckpt,**kwargs):
     trained_model=LabelProp.load_from_checkpoint(ckpt,strict=False)
     #Create a new flow model that matches shape of the new data
     # trained_model.registrator.flow=model.registrator.flow
-    print(trained_model.registrator.state_dict())
     model.registrator.unet_model.load_state_dict(trained_model.registrator.unet_model.state_dict())
     model.registrator.flow.load_state_dict(trained_model.registrator.flow.state_dict())
     # if 'CRF' in trained_model.__dict__:
