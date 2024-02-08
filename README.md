@@ -183,5 +183,7 @@ See this [repo](https://github.com/nathandecaux/napari-labelprop) to use labelpr
 
 
 ## How to contribute
+Anyone wishing to contribute to Labelprop is invited to read the doc here, then create a pull request or create an issue. 
+Contributions concerning the graphical interface, with napari or otherwise, would also be very welcome, and can refer to the napari_entry doc or the API. 
 
 
