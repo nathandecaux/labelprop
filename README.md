@@ -1,5 +1,6 @@
 # LabelProp : A semi-automatic segmentation tool for 3D medical images
 
+![ReadTheDoc](https://readthedocs.org/projects/labelprop/badge/?version=latest&style=<style>)
 [![License](https://img.shields.io/pypi/l/deep-labelprop.svg?color=green)](https://github.com/nathandecaux/labelprop/raw/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/deep-labelprop.svg?color=green)](https://pypi.org/project/deep-labelprop)
 [![Python Version](https://img.shields.io/pypi/pyversions/deep-labelprop.svg?color=green)](https://python.org)
@@ -183,7 +184,7 @@ See this [repo](https://github.com/nathandecaux/napari-labelprop) to use labelpr
 
 
 ## How to contribute
-Anyone wishing to contribute to Labelprop is invited to read the doc here, then create a pull request or create an issue. 
-Contributions concerning the graphical interface, with napari or otherwise, would also be very welcome, and can refer to the napari_entry doc or the API. 
+Anyone wishing to contribute to Labelprop is invited to read the doc [here](https://labelprop.readthedocs.io/en/latest/), then create a pull request or create an issue. 
+Contributions concerning the graphical interface, with napari or otherwise, would also be very welcome, and can refer to the [napari_entry](https://labelprop.readthedocs.io/en/latest/labelprop/napari_entry/#napari-entry) doc or the [API](https://labelprop.readthedocs.io/en/latest/labelprop/api/). 
 
 
