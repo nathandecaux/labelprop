@@ -18,7 +18,7 @@ See also the [napari-labelprop-remote](https://github.com/nathandecaux/napari-la
 
 See "Semi-automatic muscle segmentation in MR images using deep registration-based label propagation" paper : 
 
-[[Paper]![Paper](https://www.integrad.nl/assets/uploads/2016/02/cta-elsevier_logo-no_bg.png)](https://www.sciencedirect.com/science/article/pii/S0031320323002297?casa_token=r5FPBVXYXX4AAAAA:mStyUXb0i4lGqBmfF1j5fV1T9FuCMrpYfwh3lwQve2XAnzUBPZviAiFgMtH7lv6hdcWsA7yM) [[PDF]![PDF](https://www.ouvrirlascience.fr/wp-content/uploads/2018/12/HAL-3.png)](https://hal.science/hal-03945559/document)
+[[Paper]![Paper](https://www.integrad.nl/assets/uploads/2016/02/cta-elsevier_logo-no_bg.png)](https://www.sciencedirect.com/science/article/pii/S0031320323002297?casa_token=r5FPBVXYXX4AAAAA:mStyUXb0i4lGqBmfF1j5fV1T9FuCMrpYfwh3lwQve2XAnzUBPZviAiFgMtH7lv6hdcWsA7yM) [[PDF]![PDF](https://www.ouvrirlascience.fr/wp-content/uploads/2018/12/HAL-3.png)](https://hal.science/hal-03945559/document) [[GUI]<img src="https://napari.org/stable/_static/logo.png" alt="GUI" width="150"/>](https://github.com/nathandecaux/napari-labelprop)
 <p>
   <img src="https://github.com/nathandecaux/labelprop.github.io/raw/main/demo_cut.gif" width="600">
 </p>
@@ -39,13 +39,51 @@ or to get the development version :
 
 ### Data
 Labelprop operates semi-automatically, in an intra-subject mode, and can therefore be used with a single scan. 
-The scan must be a gray intensity volume, dimension 3 (LHW). Manual annotations must be supplied in an unsigned integer file of the same size, where each voxel value corresponds to the label class (0 as background). 
+The scan must be a gray intensity volume, dimension 3 (HWL). Manual annotations must be supplied in an unsigned integer file of the same size, where each voxel value corresponds to the label class (0 as background). 
 
 Most MRI scans are isotropic on one plane only, due to the thickness of the slice. Manual annotations must be provided in the isotropic plane. Propagation is therefore performed in the 3rd dimension (to be indicated with z_axis).
 
-### CLI
+### Basic usage
 
+Let's consider the following scan ```scan.nii.gz``` and a corresponding segmentation file with 3 annotated slices ```manual_annotation.nii.gz```, and some few freehand annotations  in ```hints.nii.gz``` :
+
+![Typical propagation setup](propagation.jpg)
+
+Training and propagation can be done for this single scan as follow :
+```python
+import nibabel as ni
+from labelprop.napari_entry import train_and_infer
+
+scan=ni.load('scan.nii.gz').get_fdata() # Numpy array of dimension (H,W,L)
+manual_annotations=ni.load('manual_annotations.nii.gz').get_fdata() # Numpy array of dimension (H,W,L) and dtype uint8
+hints=ni.load('hints.nii.gz').get_fdata() # Numpy array of dimension (H,W,L) and dtype uint8
+# Train and propagate 
+propagations=train_and_infer(
+    img=scan,
+    mask=manual_annotations,
+    pretrained_ckpt='pretrained.ckpt',
+    shape=256, # Size of input images for training.
+    max_epochs=100,
+    z_axis=2, # Propagation axis.
+    output_dir='path/to/savedir', 
+    name='nameofcheckpoint',
+    pretraining=False, # If True, will pretrain the model without using manual_annotations.
+    hints=hints, # Optional hints for the propagation. Numpy array of dimension (H,W,L) and dtype uint8
+)
+
+propagation_up=propagations[0] # Propagation from the bottom to the top 
+propagation_down=propagations[1] # Propagation from the top to the bottom
+
+fused_propagated_annotations=propagations # Fusion of propagation_up and propagation_down. 
+# Save results
+ni.save(ni.Nifti1Image(fused_propagated_annotations,ni.load('img.nii.gz').affine),'propagated_fused.nii.gz')
+```
+
+<details open>
+<summary>CLI</summary>
 Basic operations can be done using the command-line interface provided in labelprop.py at the root of the project.
+
+
 
 
 #### Pretraining
@@ -127,8 +165,11 @@ Although Labelprop works on a single scan, it is preferable to pre-train the mod
                                   and fused)
       -n, --name TEXT             Prefix for the output files (masks)
 
-### GUI
+</details>
 
+
+<details open>
+<summary>GUI</summary>
 See this [repo](https://github.com/nathandecaux/napari-labelprop) to use labelprop main functions in Napari 
 (See also [napari-labelprop-remote](https://github.com/nathandecaux/napari-labelprop-remote) to run labelprop in a separate process, locally or remotely).
 
@@ -136,4 +177,5 @@ See this [repo](https://github.com/nathandecaux/napari-labelprop) to use labelpr
   <img src="https://github.com/nathandecaux/labelprop.github.io/raw/main/client_server.drawio.svg" width="600">
 </p>
 
+</details>
 
