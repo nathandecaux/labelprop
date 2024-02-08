@@ -147,6 +147,16 @@ class FullScan(data.Dataset):
 
 class UnsupervisedScan(data.Dataset):
     def __init__(self, X, shape=256, z_axis=-1, name=""):
+        """
+        Initializes the DataLoading object.
+
+        Args:
+            X (ndarray): The input data.
+            shape (int or tuple, optional): The desired shape of the data. Defaults to 256.
+            z_axis (int, optional): The axis along which to move the data. Defaults to -1.
+            name (str, optional): The name of the object. Defaults to "".
+        """
+
         self.X = X.astype("float32")
         self.X = self.norm(torch.from_numpy(self.X))[None, None, ...]
         print("before interpol", self.X.shape)
@@ -184,23 +194,36 @@ class UnsupervisedScan(data.Dataset):
 
 class LabelPropDataModule(pl.LightningDataModule):
     def __init__(
-        self,
-        img_path,
-        mask_path,
-        lab="all",
-        shape=(288, 288),
-        selected_slices=None,
-        z_axis=0,
-        hints=None,
-    ):
-        super().__init__()
-        self.img_path = img_path
-        self.mask_path = mask_path
-        self.hints = hints
-        self.shape = shape
-        self.lab = lab
-        self.selected_slices = selected_slices
-        self.z_axis = z_axis
+            self,
+            img_path,
+            mask_path,
+            lab="all",
+            shape=(288, 288),
+            selected_slices=None,
+            z_axis=0,
+            hints=None,
+        ):
+            """
+            Initializes the DataLoading object.
+
+            Args:
+                img_path (str): The path to the image data.
+                mask_path (str): The path to the mask data.
+                lab (str, optional): The label to load. Defaults to "all".
+                shape (tuple, optional): The desired shape of the data. Defaults to (288, 288).
+                selected_slices (list, optional): The selected slices to load. Defaults to None.
+                z_axis (int, optional): The axis along which the slices are selected. Defaults to 0.
+                hints (dict, optional): Additional hints for loading the data. Defaults to None.
+            """
+        
+            super().__init__()
+            self.img_path = img_path
+            self.mask_path = mask_path
+            self.hints = hints
+            self.shape = shape
+            self.lab = lab
+            self.selected_slices = selected_slices
+            self.z_axis = z_axis
 
     def setup(self, stage=None):
         if isinstance(self.img_path, str):
@@ -239,10 +262,18 @@ class LabelPropDataModule(pl.LightningDataModule):
 
 class PreTrainingDataModule(pl.LightningDataModule):
     def __init__(self, img_list, shape=(288, 288), z_axis=0):
-        super().__init__()
-        self.img_list = img_list
-        self.shape = shape
-        self.z_axis = z_axis
+            """
+            Initializes the DataLoading object.
+
+            Args:
+                img_list (list): List of image paths.
+                shape (tuple, optional): Shape of the images. Defaults to (288, 288).
+                z_axis (int, optional): Z-axis value. Defaults to 0.
+            """
+            super().__init__()
+            self.img_list = img_list
+            self.shape = shape
+            self.z_axis = z_axis
 
     def setup(self, stage=None):
         training_scans = []

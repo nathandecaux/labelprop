@@ -35,39 +35,55 @@ class LabelProp(pl.LightningModule):
         return x
 
     def __init__(
-        self,
-        n_channels=1,
-        n_classes=2,
-        learning_rate=5e-4,
-        weight_decay=1e-8,
-        way="both",
-        shape=256,
-        selected_slices=None,
-        losses={},
-        by_composition=False,
-        unsupervised=False,
-    ):
-        super().__init__()
-        self.n_classes = n_classes
-        self.w_dice = 10
-        self.learning_rate = learning_rate
-        self.weight_decay = weight_decay
-        self.selected_slices = selected_slices  # Used in validation step
-        if isinstance(shape, int):
-            shape = [shape, shape]
-        self.registrator = VxmDense(shape, bidir=False, int_downsize=1, int_steps=7)
-        self.way = way  # If up, learning only "forward" transitions (phi_i->j with j>i). Other choices : "down", "both". Bet you understood ;)
-        self.by_composition = by_composition
-        self.unsupervised = unsupervised
-        # self.loss_model = MTL_loss(['sim','seg','comp','smooth'])
-        self.losses = losses
-        if self.by_composition:
-            print("Using composition for training")
-        # Get datetime for saving
-        time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.val_by_epoch = time + "_val_by_epoch.json"
-        print("Losses", losses)
-        self.save_hyperparameters()
+            self,
+            n_channels=1,
+            n_classes=2,
+            learning_rate=5e-4,
+            weight_decay=1e-8,
+            way="both",
+            shape=256,
+            selected_slices=None,
+            losses={},
+            by_composition=False,
+            unsupervised=False,
+        ):
+            """
+            Initializes the LightningModel class.
+
+            Args:
+                n_channels (int): Number of input channels. Default is 1.
+                n_classes (int): Number of output classes. Default is 2.
+                learning_rate (float): Learning rate for the optimizer. Default is 5e-4.
+                weight_decay (float): Weight decay for the optimizer. Default is 1e-8.
+                way (str): Type of transitions to learn. Possible values are "up", "down", or "both". Default is "both".
+                shape (int or list): Shape of the input. If int, it represents the height and width of the input. If list, it represents the height and width separately. Default is 256.
+                selected_slices (list or None): List of selected slices used in the validation step. Default is None.
+                losses (dict): Dictionary of loss functions. Default is an empty dictionary.
+                by_composition (bool): Whether to use composition for training. Default is False.
+                unsupervised (bool): Whether to use unsupervised learning. Default is False.
+            """
+        
+            super().__init__()
+            self.n_classes = n_classes
+            self.w_dice = 10
+            self.learning_rate = learning_rate
+            self.weight_decay = weight_decay
+            self.selected_slices = selected_slices  # Used in validation step
+            if isinstance(shape, int):
+                shape = [shape, shape]
+            self.registrator = VxmDense(shape, bidir=False, int_downsize=1, int_steps=7)
+            self.way = way  # If up, learning only "forward" transitions (phi_i->j with j>i). Other choices : "down", "both". Bet you understood ;)
+            self.by_composition = by_composition
+            self.unsupervised = unsupervised
+            # self.loss_model = MTL_loss(['sim','seg','comp','smooth'])
+            self.losses = losses
+            if self.by_composition:
+                print("Using composition for training")
+            # Get datetime for saving
+            time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            self.val_by_epoch = time + "_val_by_epoch.json"
+            print("Losses", losses)
+            self.save_hyperparameters()
 
     def apply_deform(self,x,field,ismask=False):
         """Apply deformation to x from flow field
@@ -83,6 +99,16 @@ class LabelProp(pl.LightningModule):
         return x_hat
         
     def compose_list(self, flows):
+        """
+        Composes a list of flows by applying each flow in reverse order to the last flow.
+
+        Args:
+            flows (list): A list of flows to be composed.
+
+        Returns:
+            The composed flow.
+
+        """
         flows = list(flows)
         compo = flows[-1]
         for flow in reversed(flows[:-1]):
@@ -197,6 +223,16 @@ class LabelProp(pl.LightningModule):
         return blended
 
     def training_step(self, batch, batch_nb):
+        """
+        Perform a single training step on the given batch of data.
+
+        Args:
+            batch: The input batch of data.
+            batch_nb: The batch number.
+
+        Returns:
+            The total loss computed during the training step.
+        """
         if self.unsupervised:
             X = batch  # X : Full scan (1x1xLxHxW)
             opt = self.optimizers()
@@ -307,9 +343,6 @@ class LabelProp(pl.LightningModule):
                                 loss_up_sim.append(
                                     self.compute_loss(moved_x2, x1)["sim"]
                                 )
-                                # if len(fields_up)>0:
-                                #     field_up_2=self.compose_deformation(fields_up[-1],field_up)
-                                #     loss_up.append(self.compute_loss(self.apply_deform(X[:,:,i-1],field_up_2),x2))
 
                             if not self.way == "up":
                                 moved_x2, field_down, preint_field = self.forward(
@@ -328,10 +361,6 @@ class LabelProp(pl.LightningModule):
                                     self.compute_loss(moved_x1, x2)["sim"]
                                 )
 
-                                # if len(fields_down)>0:
-                                #     field_down_2=self.compose_deformation(fields_down[-1],field_down)
-                                #     loss_down.append(self.compute_loss(self.apply_deform(X[:,:,i+1],field_down_2),x1))
-
                         # Better with mean
                         if self.way == "up":
                             losses["sim"] = torch.stack(loss_up_sim).mean()
@@ -348,16 +377,12 @@ class LabelProp(pl.LightningModule):
                                 torch.stack(loss_up_smooth).mean()
                                 + torch.stack(loss_down_smooth).mean()
                             )
-                            # loss=(loss_up+loss_down)
 
                         # Computing registration from the sequence of flow fields
                         if not self.way == "down":
                             prop_x_up = X[:, :, chunk[0], ...]
                             prop_y_up = Y[:, :, chunk[0], ...]
                             composed_fields_up = self.compose_list(fields_up)
-                            # moved_y1,mask_fields_up=self.forward(prop_y_up[:,1:],Y[:,1:,chunk[1],...],registration=True)
-                            # losses['mask_prop']=self.compute_loss(moved_mask=moved_y1,target_mask=Y[:,1:,chunk[1],...])['seg']+nn.L1Loss()(composed_fields_up*prop_y_up,mask_fields_up*prop_y_up)
-                            # losses['bending']=BendingEnergyLoss()(composed_fields_up)
 
                             if self.by_composition:
                                 prop_x_up = self.apply_deform(
@@ -369,7 +394,9 @@ class LabelProp(pl.LightningModule):
                             else:
                                 for i, field_up in enumerate(fields_up):
                                     prop_x_up = self.apply_deform(prop_x_up, field_up)
-                                    prop_y_up = self.apply_deform(prop_y_up, field_up, ismask=True)
+                                    prop_y_up = self.apply_deform(
+                                        prop_y_up, field_up, ismask=True
+                                    )
                                     if with_hints:
                                         if hints[:, 0, chunk[0] + i + 1].sum() > 0:
                                             tp_bkg = (
@@ -387,16 +414,16 @@ class LabelProp(pl.LightningModule):
                                                 :, 1, chunk[0] + i + 1
                                             ].sum()
                                             losses["hints"].append(-tp_obj)
-                                        # Compute background and foreground true positive
-                                        # prop_y_up[:,0][hints[:,0,chunk[0]+i+1]==1]=1
-                                        # prop_y_up[:,1][hints[:,1,chunk[0]+i+1]==1]=1
 
+                        # Rest of the code...
                                     # losses['contours']=self.compute_contour_loss(X[:,:,chunk[0]+i+1],prop_y_up)
 
                             if self.losses["compo-reg-up"]:
                                 losses["comp"] = self.compute_loss(
                                     prop_x_up, X[:, :, chunk[1], ...]
                                 )["sim"]
+
+            # ...
                             if self.losses["compo-dice-up"]:
                                 dice_loss = self.compute_loss(
                                     moved_mask=prop_y_up,
@@ -679,6 +706,7 @@ class LabelProp(pl.LightningModule):
             return loss
 
     def validation_step(self, batch, batch_idx):
+        """ Deprecated """
         X, Y_dense = batch
         Y = Y_dense.clone()
         # Check if file self.val_by_epoch (json file) exists, otherwise create it
@@ -740,6 +768,7 @@ class LabelProp(pl.LightningModule):
 
 
 class MTL_loss(torch.nn.Module):
+    """ Multi-task learning loss. Not used """
     def __init__(self, losses):
         super().__init__()
         start = 1.0

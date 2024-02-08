@@ -55,20 +55,38 @@ def set_ckpt_dir():
     
 global sessions
 sessions={}
+
 def create_buf_npz(array_dict):
+    """
+    Create a compressed NumPy .npz file from a dictionary of arrays.
+
+    Parameters:
+    array_dict (dict): A dictionary containing arrays to be saved in the .npz file.
+
+    Returns:
+    io.BytesIO: A BytesIO object containing the compressed .npz file.
+    """
     buf = io.BytesIO()
     np.savez_compressed(buf, **array_dict)
     buf.seek(0)
     return buf
 
 def timer(func):
-    @functools.wraps(func) #optional line if you went the name of the function to be maintained, to be imported
+    """
+    Decorator that measures the execution time of a function.
+
+    Args:
+        func: The function to be timed.
+
+    Returns:
+        The wrapped function.
+    """
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
         start = time.time()
-        #do somehting with the function
         value = func(*args, **kwargs)
         end = time.time()
-        print('Time',end-start)
+        print('Time', end - start)
         return value
     return wrapper
 
@@ -91,7 +109,15 @@ def get_tmp_hashed_img():
 @app.route('/inference',methods=['POST'])
 def inference():
     """
-    Receive img and mask arrays as string and checkpoint,shape,z_axis,lab parameters and call propagate_from_ckpt. 
+    Perform inference using the LabelProp model.
+
+    This function loads the necessary input data, processes it, and returns the inference results.
+    It saves the input image and mask to the temporary folder, and then calls the `propagate_from_ckpt` function
+    to perform the inference. The results are stored in a session dictionary.
+
+    Returns:
+        response (Response): The response object containing the session token.
+
     """
     check_tmp()
     arrays=np.load(request.files['arrays'])
@@ -150,8 +176,19 @@ def inference():
 @app.route('/training',methods=['POST'])
 def training():
     """
-    Receive img and mask arrays as string and checkpoint,shape,z_axis,lab parameters and call propagate_from_ckpt. 
+    This function performs the training process for the labelprop module.
+
+    It loads the necessary arrays and parameters from the request files, checks for temporary files,
+    and prepares the input data for training. It then calls the `train_and_infer` function to perform
+    the training and inference process. Finally, it saves the results and returns a response token.
+
+    Returns:
+        response (Response): The response object containing the token.
+
+    Raises:
+        Exception: If an error occurs during the training process.
     """
+    
     check_tmp()
     arrays=np.load(request.files['arrays'])
     infos=json.loads(request.files['params'].read())

@@ -64,7 +64,7 @@ def to_batch(x,device='cpu'):
 def hardmax(Y,dim):
     return torch.moveaxis(F.one_hot(torch.argmax(Y,dim),Y.max()+1), -1, dim)
 
-def get_chunks(Y):
+def get_chunks(Y):    
     chunks=[]
     chunk=[]
     #Identifying chunks (i->j)
@@ -373,6 +373,7 @@ def propagate_by_composition(X,Y,hints,model,fields=None,criteria='ncc',reductio
         return Y_up,Y_down,Y_fused
 
 def complex_propagation(X,Y,model):
+    """ Deprecated """
     Y_up=torch.clone(Y)
     Y_down=torch.clone(Y)
     n_classes=Y_up.shape[0]

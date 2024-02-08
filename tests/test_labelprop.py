@@ -85,14 +85,14 @@ class TestLabelprop(unittest.TestCase):
     def test_cli(self):
         """Test pretraining"""
 
-        os.system('labelprop pretrain pretraining.csv --shape 20 --max_epochs 1 --z_axis 0 --output_dir /tmp/labelprop_test --name test_pretraining')
+        os.system('labelprop pretrain /tmp/labelprop_test/pretraining.csv --shape 20 --max_epochs 1 --z_axis 0 --output_dir /tmp/labelprop_test --name test_pretraining')
         #Assert test.ckpt exists
         self.assertEqual(os.path.exists('/tmp/labelprop_test/test_pretraining.ckpt'),True)
 
-        os.system('labelprop train img.nii.gz mask.nii.gz --shape 20 --max_epochs 1 --z_axis 0 --output_dir /tmp/labelprop_test --name test_training --pretrained_ckpt /tmp/labelprop_test/test_pretraining.ckpt')
+        os.system('labelprop train /tmp/labelprop_test/img.nii.gz /tmp/labelprop_test/mask.nii.gz --shape 20 --max_epochs 1 --z_axis 0 --output_dir /tmp/labelprop_test --name test_training --pretrained_ckpt /tmp/labelprop_test/test_pretraining.ckpt')
         self.assertEqual(os.path.exists('/tmp/labelprop_test/test_training.ckpt'),True)
 
-        os.system('labelprop propagate img.nii.gz mask.nii.gz /tmp/labelprop_test/test_training.ckpt --shape 20 --z_axis 0 --output_dir /tmp/labelprop_test --name propagated_mask')
+        os.system('labelprop propagate /tmp/labelprop_test/img.nii.gz /tmp/labelprop_test/mask.nii.gz /tmp/labelprop_test/test_training.ckpt --shape 20 --z_axis 0 --output_dir /tmp/labelprop_test --name propagated_mask')
         self.assertEqual(ni.load('/tmp/labelprop_test/propagated_mask_fused.nii.gz').shape,(20,20,20))
 
     

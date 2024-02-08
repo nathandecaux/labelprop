@@ -25,6 +25,8 @@ See "Semi-automatic muscle segmentation in MR images using deep registration-bas
 
 ## Installation
 
+https://github.com/napari/napari/releases/download/v0.4.19/napari-0.4.19-Linux-x86_64.sh
+
 Using pip
 
     pip install deep-labelprop
@@ -171,11 +173,15 @@ Although Labelprop works on a single scan, it is preferable to pre-train the mod
 <details open>
 <summary>GUI</summary>
 See this [repo](https://github.com/nathandecaux/napari-labelprop) to use labelprop main functions in Napari 
-(See also [napari-labelprop-remote](https://github.com/nathandecaux/napari-labelprop-remote) to run labelprop in a separate process, locally or remotely).
+(See also [napari-labelprop-remote](https://github.com/nathandecaux/napari-labelprop-remote) to run labelprop in a separate process, locally or remotely, which uses the [API](https://github.com/nathandecaux/labelprop/blob/master/labelprop/api.py) ).
 
 <p align="center">
   <img src="https://github.com/nathandecaux/labelprop.github.io/raw/main/client_server.drawio.svg" width="600">
 </p>
 
 </details>
+
+
+## How to contribute
+
 

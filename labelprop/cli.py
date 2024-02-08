@@ -22,7 +22,7 @@ def cli():
 @click.option('--z_axis','-z', default=2, help='Axis along which to propagate (default: 2)')
 @click.option('--output_dir','-o', type=click.Path(exists=True,file_okay=False),default='~/label_prop_checkpoints',help='Output directory for checkpoint and predicted masks')
 @click.option('--name','-n', default='',help='Prefix for the output files (checkpoint and masks)')
-def train(img_path,mask_path,pretrained_ckpt,shape,max_epochs,z_axis,output_dir,name):
+def train(img_path,mask_path,hints,pretrained_ckpt,shape,max_epochs,z_axis,output_dir,name):
     """
     Train a model and save the checkpoint and predicted masks.
     IMG_PATH is a greyscale nifti (.nii.gz or .nii) image, while MASKPATH is it related sparse segmentation.
