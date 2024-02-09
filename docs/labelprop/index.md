@@ -10,7 +10,7 @@
 ## Modules
 
 - [Dataloading](./DataLoading.md)
-- [Multilevelnet](./MultiLevelNet.md)
+<!-- - [Multilevelnet](./MultiLevelNet.md) -->
 - [Pretraining Model](./Pretraining_model.md)
 - [Api](./api.md)
 - [Cli](./cli.md)
@@ -19,4 +19,4 @@
 - [Train](./train.md)
 - [Utils](./utils.md)
 - [Voxelmorph2d](./voxelmorph2d.md)
-- [Weight Optimizer](./weight_optimizer.md)
+<!-- - [Weight Optimizer](./weight_optimizer.md) -->
