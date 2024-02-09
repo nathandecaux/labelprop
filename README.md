@@ -43,7 +43,10 @@ or to get the development version :
 <details open>
 <summary><h2>Data</h2></summary>
 Labelprop operates semi-automatically, in an intra-subject mode, and can therefore be used with a single scan. 
-The scan must be a gray intensity volume, dimension 3 ( ```HWL``` ). Manual annotations must be supplied in an ```uint8``` file of the same size, where each voxel value corresponds to the label class ( ```0``` as background). 
+
+The scan must be a gray intensity volume, dimension 3 ( ```HWL``` ).
+
+Manual annotations must be supplied in an ```uint8``` file of the same size, where each voxel value corresponds to the label class ( ```0``` as background). 
 
 Most MRI scans are isotropic on one plane only, due to the thickness of the slice. Manual annotations must be provided in the isotropic plane. Propagation is therefore performed in the 3rd dimension (to be indicated with ```z_axis```).
 
