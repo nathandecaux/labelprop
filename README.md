@@ -184,8 +184,11 @@ Although Labelprop works on a single scan, it is preferable to pre-train the mod
 
 <details open>
 <summary><h2>GUI</h2></summary>
-See this [repo](https://github.com/nathandecaux/napari-labelprop) to use labelprop main functions in Napari 
-(See also [napari-labelprop-remote](https://github.com/nathandecaux/napari-labelprop-remote) to run labelprop in a separate process, locally or remotely, which uses the [API](https://github.com/nathandecaux/labelprop/blob/master/labelprop/api.py) ).
+
+See this [repo](https://github.com/nathandecaux/napari-labelprop) to use 
+labelprop main functions in Napari (cf. the GIF in the About section). 
+
+See also [napari-labelprop-remote](https://github.com/nathandecaux/napari-labelprop-remote) to run labelprop in a separate process, locally or remotely, which uses the [API](https://github.com/nathandecaux/labelprop/blob/master/labelprop/api.py):
 
 <p align="center">
   <img src="https://github.com/nathandecaux/labelprop.github.io/raw/main/client_server.drawio.svg" width="600">
