@@ -143,6 +143,7 @@ Although Labelprop works on a single scan, it is preferable to pre-train the mod
       segmentation.
 
     Options:
+      -h, --hints FILE            Path to the hints image (.nii.gz)
       -s, --shape INTEGER         Image size (default: 256)
       -c, --pretrained_ckpt FILE  Path to the pretrained checkpoint (.ckpt)
       -e, --max_epochs INTEGER
@@ -162,6 +163,7 @@ Although Labelprop works on a single scan, it is preferable to pre-train the mod
       CHECKPOINT is the path to the checkpoint (.ckpt) file.
 
     Options:
+      -h, --hints FILE            Path to the hints image (.nii.gz)
       -s, --shape INTEGER         Image size (default: 256)
       -z, --z_axis INTEGER        Axis along which to propagate (default: 2)
       -l, --label INTEGER         Label to propagate (default: 0 = all)
