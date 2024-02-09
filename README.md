@@ -40,14 +40,14 @@ or to get the development version :
 
 ## Usage
 
-### Data
+<summary><h2>Data</h2></summary>
 Labelprop operates semi-automatically, in an intra-subject mode, and can therefore be used with a single scan. 
 The scan must be a gray intensity volume, dimension 3 (HWL). Manual annotations must be supplied in an unsigned integer file of the same size, where each voxel value corresponds to the label class (0 as background). 
 
 Most MRI scans are isotropic on one plane only, due to the thickness of the slice. Manual annotations must be provided in the isotropic plane. Propagation is therefore performed in the 3rd dimension (to be indicated with z_axis).
 
 Free-form scribbles/indications can also be supplied. This allows the user to annotate certain parts, without having to completely delineate a cut. In addition, hints can be provided in all planes, and outside the annotated top and bottom section, enabling propagation to be extrapolated. The hints file must be of the same type and size as the manual annotations file, with the same class/label correspondences. To specify a hint as part of the background class, voxels must have the label ```255```.
-### Basic usage
+<summary><h2>Basic Usage</h2></summary>
 
 Let's consider the following scan ```scan.nii.gz``` and a corresponding segmentation file with 3 annotated slices ```manual_annotation.nii.gz```, and some few freehand annotations  in ```hints.nii.gz``` :
 
