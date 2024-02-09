@@ -51,6 +51,9 @@ Manual annotations must be supplied in an ```uint8``` file of the same size, whe
 Most MRI scans are isotropic on one plane only, due to the thickness of the slice. Manual annotations must be provided in the isotropic plane. Propagation is therefore performed in the 3rd dimension (to be indicated with ```z_axis```).
 
 Free-form scribbles/indications can also be supplied. This allows the user to annotate certain parts, without having to completely delineate a cut. In addition, hints can be provided in all planes, and outside the annotated top and bottom section, enabling propagation to be extrapolated. The hints file must be of the same type and size as the manual annotations file, with the same class/label correspondences. To specify a hint as part of the background class, voxels must have the label ```255```.
+
+Pretrained weights can be downloaded here [pretrained weights](https://raw.githubusercontent.com/nathandecaux/napari-labelprop/main/pretrained.ckpt).
+
 </details>
 
 <details open>
