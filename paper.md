@@ -70,6 +70,8 @@ Similar to Voxelmorph, the underlying model in this approach learns to generate 
  
  ![Example of propagation from 3 manual annotations of the deltoid muscle in a MRI, in axial plane. Optionnal scribbles (yellow) can be provided, without plane constraints, for further guidance.\label{fig:propagation}](propagation.pdf)
 
+# State of the field
+In a previous study, we evaluated our method against various approaches in a shoulder muscle MRI dataset and the publicly accessible MyoSegmenTUM dataset. Specifically, we focused on intra-subject segmentation using only 3 annotated slices [@decaux_semi-automatic_2023]. The reference methods were the [ITKMorphologicalContourInterpolation](https://github.com/KitwareMedical/ITKMorphologicalContourInterpolation) approach [@albu2008morphology], a well-known implementation of [UNet](https://github.com/milesial/Pytorch-UNet) [@ronneberger2015u], and a [semi-automatic image sequence segmentation approach](https://github.com/ajabri/videowalk) [@jabri_space-time_2020]. Our results showed that in this particular configuration, our method (Labelprop) outperformed all of these methods. Additionally, our method also demonstrated positive performance compared to a leave-one-out trained UNet for the shoulder dataset [@conze2020healthy].
 
 
 # Software Details
