@@ -52,7 +52,7 @@ Most MRI scans are isotropic on one plane only, due to the thickness of the slic
 
 Free-form scribbles/indications can also be supplied. This allows the user to annotate certain parts, without having to completely delineate a cut. In addition, hints can be provided in all planes, and outside the annotated top and bottom section, enabling propagation to be extrapolated. The hints file must be of the same type and size as the manual annotations file, with the same class/label correspondences. To specify a hint as part of the background class, voxels must have the label ```255```.
 
-Pretrained weights can be downloaded here [pretrained weights](https://raw.githubusercontent.com/nathandecaux/napari-labelprop/main/pretrained.ckpt).
+Pretrained weights can be downloaded [here](https://raw.githubusercontent.com/nathandecaux/napari-labelprop/main/pretrained.ckpt).
 
 </details>
 
