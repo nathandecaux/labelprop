@@ -80,6 +80,6 @@ LabelProp is composed of three main components: labelprop, napari-labelprop, and
 
 
 # Acknowledgements
-This work was partially funded by ANR (AI4Child project, grant ANR-19-CHIA-0015) and Innoveo from CHU de Brest.
+This work was partially funded by ANR (AI4Child project, grant ANR-19-CHIA-0015), Innoveo from CHU de Brest and Fondation de l’avenir.
 
 # References
