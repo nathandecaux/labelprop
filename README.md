@@ -26,8 +26,6 @@ See "Semi-automatic muscle segmentation in MR images using deep registration-bas
 
 ## Installation
 
-https://github.com/napari/napari/releases/download/v0.4.19/napari-0.4.19-Linux-x86_64.sh
-
 Using pip
 
     pip install deep-labelprop
