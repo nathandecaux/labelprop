@@ -68,7 +68,7 @@ Similar to Voxelmorph, the underlying model in this approach learns to generate 
 
  During the inference phase, each annotation is propagated to its nearest neighboring annotation, resulting in two predictions for each intermediate slice from different source annotations. The label fusion process involves weighting each prediction based on their distance to the source annotation or an estimate of the registration accuracy. Importantly, the propagation method is label-agnostic, allowing for the simultaneous segmentation of multiple structures, regardless of whether they are manually annotated on the same slice or not.
  
- ![Example of propagation from 3 manual annotations of the deltoid muscle in a MRI, in axial plane. Optionnal scribbles (yellow) can be provided, without plane constraints, for further guidance.\label{fig:propagation}](propagation.pdf)
+ ![Example of propagation from 3 manual annotations of the right deltoid muscle in an MRI, in the axial plane. Optional scribbles (yellow) can be provided, without plane constraints, for further guidance.\label{fig:propagation}](propagation.pdf)
 
 # State of the field
 In a previous study, we evaluated our method against various approaches in a shoulder muscle MRI dataset and the publicly accessible MyoSegmenTUM dataset. Specifically, we focused on intra-subject segmentation using only 3 annotated slices [@decaux_semi-automatic_2023]. The reference methods were the [ITKMorphologicalContourInterpolation](https://github.com/KitwareMedical/ITKMorphologicalContourInterpolation) approach [@albu2008morphology], a well-known implementation of [UNet](https://github.com/milesial/Pytorch-UNet) [@ronneberger2015u], and a [semi-automatic image sequence segmentation approach](https://github.com/ajabri/videowalk) [@jabri_space-time_2020]. Our results showed that in this particular configuration, our method (Labelprop) outperformed all of these methods. Additionally, our method also demonstrated competitive performance compared to a leave-one-out trained UNet for the shoulder dataset [@conze2020healthy].
@@ -80,6 +80,6 @@ LabelProp is composed of three main components: labelprop, napari-labelprop, and
 
 
 # Acknowledgements
-This work was partially funded by ANR (AI4Child project, grant ANR-19-CHIA-0015) and Innoveo from CHRU de Brest.
+This work was partially funded by ANR (AI4Child project, grant ANR-19-CHIA-0015) and Innoveo from CHU de Brest.
 
 # References
