@@ -7,6 +7,34 @@ import numpy as np
 import math
 from kornia.geometry.transform import get_perspective_transform,get_affine_matrix2d
 from .MultiLevelNet import MultiLevelNet as MLNet
+# from .elunet.elunet import ELUnet
+
+class LightUNet(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(LightUNet, self).__init__()
+        
+        self.encoder = nn.Sequential(
+            nn.Conv2d(in_channels, 64, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        
+        self.decoder = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, out_channels, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        )
+        
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
+
+
 class VxmDense(nn.Module):
     """
     VoxelMorph network for (unsupervised) nonlinear registration between two images.
@@ -63,7 +91,8 @@ class VxmDense(nn.Module):
         #DynUNet(spatial_dims, in_channels, out_channels, kernel_size, strides, upsample_kernel_size, filters=None, dropout=None, norm_name=('INSTANCE', {'affine': True}), act_name=('leakyrelu', {'inplace': True, 'negative_slope': 0.01}), deep_supervision=False, deep_supr_num=1, res_block=False, trans_bias=False)
         # self.unet_model=UNet(src_feats*2,trg_feats*2,16,filters,strides=(len(filters)-1)*[2],num_res_units=(len(filters)-2))
         self.unet_model=UNet(src_feats*2,trg_feats*2,16,filters,strides=(len(filters)-1)*[2],num_res_units=(len(filters)-2))
-
+        # self.unet_model=ELUnet(2,16,4)
+        # self.unet_model=LightUNet(2,16)
         # self.unet_model=DynUNet(2,src_feats*2,trg_feats*2,(len(filters))*[(3,3)],strides=(len(filters))*[2],upsample_kernel_size=(len(filters)-1)*[(3,3)])
         # self.unet_model=AttentionUnet(2,src_feats*2,16,channels=filters,strides=(len(filters)-1)*[2],dropout=0.1)
         # self.unet_model=SwinUNETR(
@@ -551,3 +580,6 @@ class Grad:
         if self.loss_mult is not None:
             grad *= self.loss_mult
         return grad
+
+if __name__ == "__main__":
+    model=VxmDense((192,192),sub_levels=3)

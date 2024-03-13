@@ -118,6 +118,7 @@ class FullScan(data.Dataset):
     def __getitem__(self, index):
         x = self.X[index]
         y = self.Y[index]
+        print(x.shape)
         if self.hints != None:
             hints = self.hints[index]
             return x.unsqueeze(0), y, hints

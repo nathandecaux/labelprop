@@ -57,17 +57,21 @@ def propagate_from_ckpt(img, mask, checkpoint, shape=304, z_axis=2, label='all',
         tuple: A tuple containing the propagated labels for the up direction, down direction, and fused direction.
     """
     ckpt_dir=get_ckpt_dir()
-    shape=int(shape/8)*8
+    #Check if shape is tuple
+    if isinstance(shape,int):
+        shape=int(shape/16)*16
+        shape=(shape,shape)
     if str(label)=='0': label='all'
     if isinstance(img,str): img=ni.load(img).get_fdata()
     if isinstance(mask,str): mask=ni.load(mask).get_fdata()
     if isinstance(hints, str) : hints=ni.load(hints).get_fdata()
+    with torch.no_grad():
+        torch.cuda.empty_cache()
     true_shape=img.shape
     by_composition=True
     n_classes=int(np.max(mask))
     if '/' not in checkpoint:
         checkpoint=join(ckpt_dir,checkpoint)
-    shape=(shape,shape)#torch.load(checkpoint)['hyper_parameters']['shape']
     losses={'compo-reg-up':True,'compo-reg-down':True,'compo-dice-up':True,'compo-dice-down':True,'bidir-cons-reg':False,'bidir-cons-dice':False}
     model_PARAMS={'n_classes':n_classes,'way':'both','shape':shape,'selected_slices':None,'losses':losses,'by_composition':False}
     print('hey ho')
@@ -108,8 +112,12 @@ def train_and_infer(img, mask, pretrained_ckpt, shape, max_epochs, z_axis=2, out
     ckpt_dir=get_ckpt_dir()
     
     #Check if shape is tuple
+    if isinstance(shape,int):
+        shape=int(shape/16)*16
+        shape=(shape,shape)
     
-    shape=int(shape/8)*8
+    with torch.no_grad():
+        torch.cuda.empty_cache()
 
     way='both'
     if pretrained_ckpt!=None:

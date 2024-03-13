@@ -38,7 +38,7 @@ class LabelProp(pl.LightningModule):
             self,
             n_channels=1,
             n_classes=2,
-            learning_rate=5e-4,
+            learning_rate=1e-3,
             weight_decay=1e-8,
             way="both",
             shape=256,
@@ -65,7 +65,7 @@ class LabelProp(pl.LightningModule):
         
             super().__init__()
             self.n_classes = n_classes
-            self.w_dice = 10
+            self.w_dice = 1
             self.learning_rate = learning_rate
             self.weight_decay = weight_decay
             self.selected_slices = selected_slices  # Used in validation step
@@ -178,7 +178,7 @@ class LabelProp(pl.LightningModule):
         if moved != None:
             # max_peak=F.conv2d(target,target).sum()
             # loss_ncc=-F.conv2d(moved,target).sum()/max_peak#+NCC().loss(moved,target)
-            loss_ncc = NCC().loss(moved, target)
+            loss_ncc = 10*nn.MSELoss()(moved,target)#NCC().loss(moved, target)
             # loss_ncc=GlobalMutualInformationLoss()(moved,target)#MONAI
             # loss_ncc=LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=99)(moved,target) #MONAI
             # loss_ncc=nn.MSELoss()(moved,target)
@@ -198,7 +198,7 @@ class LabelProp(pl.LightningModule):
         if field != None:
             # loss_trans=BendingEnergyLoss()(field) #MONAI
             loss_trans = Grad().loss(field, field)
-            losses["smooth"] = 1*loss_trans
+            losses["smooth"] = 0.1*loss_trans
         # Return dict of losses
         return losses  # {'sim': loss_ncc,'seg':loss_seg,'smooth':loss_trans}
 
