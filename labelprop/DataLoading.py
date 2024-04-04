@@ -49,7 +49,7 @@ class FullScan(data.Dataset):
 
         if isinstance(shape, int):
             shape = (shape, shape)
-        self.Y = torch.moveaxis(func.one_hot(self.Y.long(),self.n_labels), -1, 1)    
+        self.Y = self.to_one_hot(self.Y,self.n_labels)  
         # self.Y=to_one_hot(self.Y,self.n_labels,dim=1)    
         self.shape = (self.Y.shape[2], shape[0], shape[1])
         self.X, self.Y = self.resample(self.X, self.Y, self.shape)
@@ -115,6 +115,23 @@ class FullScan(data.Dataset):
 
         # self.Y=torch.moveaxis(func.one_hot(self.Y.long()), -1, 1).float()
 
+    def to_one_hot(self, Y, n_labels, dim=0):
+        """
+        One hot encoding of a label tensor
+        Input:
+            Y: label tensor
+            dim: dimension where to apply one hot encoding
+        """
+        #Convert Y to uint8 
+        Y=Y.to(torch.uint8)
+        print(Y.shape)
+        one_hot_Y=[]
+        for i in range(n_labels):
+            one_hot_Y.append((Y==i))
+        one_hot_Y=torch.stack(one_hot_Y,1)
+        return one_hot_Y
+
+    
     def __getitem__(self, index):
         x = self.X[index]
         y = self.Y[index]
@@ -126,8 +143,10 @@ class FullScan(data.Dataset):
             return x.unsqueeze(0), y
 
     def resample(self, X, Y, size):
+        print('Resampling image')
         X = func.interpolate(X, size[1:], mode="bilinear", align_corners=True)
-        Y = func.interpolate(Y[0] * 1.0, size[1:], mode="bilinear", align_corners=True)[None, ...]
+        print('Resampling mask')
+        Y = func.interpolate(Y[0].to(torch.uint8), size[1:])[None, ...]
         return X, Y
 
     def __len__(self):
@@ -332,8 +351,8 @@ class BatchLabelPropDataModule(pl.LightningDataModule):
         return DataLoader(self.train_dataset, 1)
 
 if __name__ == "__main__":
-    img="~/Images/sub-000/img.nii.gz"
-    mask="~/Images/sub-000/mask_3slices.nii.gz"
+    img="~/Images/sub-000/sub-03013_ses-01-e-THRIVE_SENSE.nii.gz"
+    mask="~/Images/sub-000/sub-03013_ses-01_annot.nii.gz"
     img=ni.load(img).get_fdata()
     mask=ni.load(mask).get_fdata()
     FullScan(img,mask,lab="all",shape=(300,300),selected_slices=None,z_axis=0,hints=None,isotropic=True)

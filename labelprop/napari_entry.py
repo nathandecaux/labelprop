@@ -33,10 +33,9 @@ def resample(Y,size):
     """
     Resample a label tensor to the given size
     """
-    Y=torch.moveaxis(func.one_hot(Y.long()),-1,0)
-    Y=func.interpolate(Y[None,...]*1.,size,mode='trilinear',align_corners=True)[0]
-
-    return torch.argmax(Y,0)
+    # Y=torch.moveaxis(func.one_hot(Y.long()),-1,0)
+    Y=func.interpolate(Y[None,None,...].to(torch.uint8),size)[0,0]
+    return Y
 
 
 def propagate_from_ckpt(img, mask, checkpoint, shape=304, z_axis=2, label='all', hints=None, **kwargs):
@@ -79,7 +78,9 @@ def propagate_from_ckpt(img, mask, checkpoint, shape=304, z_axis=2, label='all',
     dm=LabelPropDataModule(img_path=img,mask_path=mask,lab=label,shape=shape,selected_slices=None,z_axis=z_axis,hints=hints)
 
     #Inference
+    
     Y_up,Y_down,Y_fused=inference(datamodule=dm,model_PARAMS=model_PARAMS,ckpt=checkpoint,**kwargs)
+    print('Inference done')
     if z_axis!=0:
         Y_up=torch.moveaxis(Y_up,0,z_axis)
         Y_down=torch.moveaxis(Y_down,0,z_axis)
