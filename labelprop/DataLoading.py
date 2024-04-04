@@ -126,10 +126,8 @@ class FullScan(data.Dataset):
             return x.unsqueeze(0), y
 
     def resample(self, X, Y, size):
-        X = func.interpolate(X[None, ...], size, mode="trilinear", align_corners=True)[
-            0
-        ]
-        Y = func.interpolate(Y * 1.0, size, mode="trilinear", align_corners=True)
+        X = func.interpolate(X, size[1:], mode="bilinear", align_corners=True)
+        Y = func.interpolate(Y[0] * 1.0, size[1:], mode="bilinear", align_corners=True)[None, ...]
         return X, Y
 
     def __len__(self):
@@ -332,3 +330,10 @@ class BatchLabelPropDataModule(pl.LightningDataModule):
 
     def train_dataloader(self, batch_size=1):
         return DataLoader(self.train_dataset, 1)
+
+if __name__ == "__main__":
+    img="~/Images/sub-000/img.nii.gz"
+    mask="~/Images/sub-000/mask_3slices.nii.gz"
+    img=ni.load(img).get_fdata()
+    mask=ni.load(mask).get_fdata()
+    FullScan(img,mask,lab="all",shape=(300,300),selected_slices=None,z_axis=0,hints=None,isotropic=True)

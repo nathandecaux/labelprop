@@ -122,3 +122,4 @@ os
 .gitignore
 labelprop/antsmodel.py
 labelprop/datagen.ipynb
+test.ckpt
