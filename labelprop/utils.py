@@ -14,6 +14,7 @@ from monai.losses import GlobalMutualInformationLoss,LocalNormalizedCrossCorrela
 from kornia.losses import HausdorffERLoss,SSIMLoss,MS_SSIMLoss
 import json 
 from torch.nn import Sigmoid
+import time
 
 class NumpyEncoder(json.JSONEncoder):
     """ Special json encoder for numpy types """
@@ -262,6 +263,7 @@ def propagate_by_composition(X,Y,hints,model,fields=None,criteria='ncc',reductio
     """
     X=X.to(device)
     Y=Y.to('cpu')
+   
     if hints!=None: hints=hints.to('cpu')
     lab_chunks={}
     model.eval().to(device)
@@ -291,6 +293,8 @@ def propagate_by_composition(X,Y,hints,model,fields=None,criteria='ncc',reductio
             if not isinstance(chunks,int):
                 for chunk in chunks:
                     for i in list(range(*chunk))[1:]:
+                        torch.cuda.empty_cache()
+
                         composed_field_up=model.compose_list(fields_up[chunk[0]:i]).to(device)
                         composed_field_down=model.compose_list(fields_down[i:chunk[1]][::-1]).to(device)
                         Y_up[lab:lab+1,i]=model.apply_deform(Y_up[lab:lab+1,i-1].unsqueeze(0).to(device),fields_up[i-1],ismask=True).cpu().detach()[0]
@@ -363,7 +367,13 @@ def propagate_by_composition(X,Y,hints,model,fields=None,criteria='ncc',reductio
                 weights[:,i,1]=0
                 composed_field_up=model.compose_list(fields_up[end:i]).to(device)
                 Y_up[lab:lab+1,i]=model.apply_deform(Y[lab:lab+1,end].unsqueeze(0).to(device),composed_field_up,ismask=True).cpu().detach()[0]
-                
+
+    print('Propagation done')
+    #Clear memory
+    del fields_up
+    del fields_down
+    torch.cuda.empty_cache()
+    time.sleep(10)
     Y_up[0]=1-torch.max(Y_up[1:],0)[0]
     Y_down[0]=1-torch.max(Y_down[1:],0)[0]
     Y_fused=fuse_up_and_down(Y_up,Y_down,weights)

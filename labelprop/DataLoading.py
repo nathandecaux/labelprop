@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader, ConcatDataset
 from torch.nn import functional as func
 import torch
 import numpy as np
-
+from skimage.transform import resize
 
 def to_one_hot(Y, n_labels, dim=1):
     """
@@ -124,7 +124,6 @@ class FullScan(data.Dataset):
         """
         #Convert Y to uint8 
         Y=Y.to(torch.uint8)
-        print(Y.shape)
         one_hot_Y=[]
         for i in range(n_labels):
             one_hot_Y.append((Y==i))
@@ -146,7 +145,9 @@ class FullScan(data.Dataset):
         print('Resampling image')
         X = func.interpolate(X, size[1:], mode="bilinear", align_corners=True)
         print('Resampling mask')
-        Y = func.interpolate(Y[0].to(torch.uint8), size[1:])[None, ...]
+        # Y = func.interpolate(Y[0].to(torch.uint8), size[1:])[None, ...]
+        #Use resize 
+        Y = torch.from_numpy(resize(Y.numpy(),(1,Y.shape[1],size[0],size[1],size[2]),order=0,anti_aliasing=False)).long()
         return X, Y
 
     def __len__(self):
@@ -244,6 +245,7 @@ class LabelPropDataModule(pl.LightningDataModule):
             self.z_axis = z_axis
 
     def setup(self, stage=None):
+        print('Dataloader : update 11/04/2024')
         if isinstance(self.img_path, str):
             img = ni.load(self.img_path).get_fdata()
             mask = ni.load(self.mask_path).get_fdata()
@@ -355,4 +357,4 @@ if __name__ == "__main__":
     mask="~/Images/sub-000/sub-03013_ses-01_annot.nii.gz"
     img=ni.load(img).get_fdata()
     mask=ni.load(mask).get_fdata()
-    FullScan(img,mask,lab="all",shape=(300,300),selected_slices=None,z_axis=0,hints=None,isotropic=True)
+    FullScan(img,mask,lab="all",shape=(240,240),selected_slices=None,z_axis=0,hints=None,isotropic=True)
