@@ -30,11 +30,9 @@ Using pip
 
     pip install deep-labelprop
 
-or to get the development version :
+or to get the development version (recommended):
 
-    git clone https://github.com/nathandecaux/labelprop
-    cd labelprop
-    pip install -e .
+    pip git+https://github.com/nathandecaux/labelprop.git
 
 ## Usage
 
